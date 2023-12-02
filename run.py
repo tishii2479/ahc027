@@ -86,7 +86,7 @@ def run(
     solver_version: str,
     case_num: int,
     database_csv: str,
-    args: str = ""
+    args: str = "",
 ) -> pd.DataFrame:
     solver_cmd = f"{solver_path} {args}"
 
@@ -188,10 +188,7 @@ if __name__ == "__main__":
     parser.add_argument("-e", "--eval", action="store_true")
     parser.add_argument("-n", "--case_num", type=int, default=100)
     parser.add_argument(
-        "-s",
-        "--solver-path",
-        type=str,
-        default="./target/release/ahc024"
+        "-s", "--solver-path", type=str, default="./target/release/ahc027"
     )
     parser.add_argument(
         "-a",
@@ -211,15 +208,14 @@ if __name__ == "__main__":
     else:
         subprocess.run("cargo build --features local --release", shell=True)
         subprocess.run(
-            f"python3 expander.py > log/backup/{args.solver_version}.rs",
-            shell=True
+            f"python3 expander.py > log/backup/{args.solver_version}.rs", shell=True
         )
         run(
             args.data_dir,
             args.solver_path,
             args.solver_version,
             args.case_num,
-            args.database_csv
+            args.database_csv,
         )
         evaluate_absolute_score(
             args.solver_version,
