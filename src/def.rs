@@ -54,7 +54,7 @@ impl Dir {
         }
     }
 
-    pub fn inv(&self) -> Dir {
+    pub fn rev(&self) -> Dir {
         match self {
             Dir::Up => Dir::Down,
             Dir::Right => Dir::Left,
