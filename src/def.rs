@@ -71,4 +71,15 @@ impl Dir {
             Dir::Left => (s.0, s.1 - 1),
         }
     }
+
+    pub fn from(s: (usize, usize), t: (usize, usize)) -> Dir {
+        let d = (t.0 as i64 - s.0 as i64, t.1 as i64 - s.1 as i64);
+        match d {
+            (-1, 0) => Dir::Up,
+            (0, 1) => Dir::Right,
+            (1, 0) => Dir::Down,
+            (0, -1) => Dir::Left,
+            _ => panic!("{:?} {:?}", s, t),
+        }
+    }
 }
