@@ -1,31 +1,29 @@
-use std::collections::BinaryHeap;
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BinaryHeap, VecDeque};
 
 use crate::def::*;
 use crate::util::*;
 
 type Adj = Vec<Vec<Vec<(Dir, (usize, usize))>>>;
 
-const INF: i64 = 1e12 as i64;
-const EDGE_WEIGHT: i64 = 1e6 as i64; // NOTE: USED_CODEより小さくあるべき
-const USED_CODE: i64 = -1e9 as i64;
-const GETA: i64 = 1e5 as i64;
+const L: usize = 1e4 as usize;
+const INF: i64 = 1e17 as i64;
+const EPS: f64 = 1e-6;
+const EDGE_WEIGHT: i64 = 1e9 as i64; // NOTE: USED_CODEより小さくあるべき
+const USED_CODE: i64 = 1e9 as i64;
 
 pub fn solve(input: &Input) -> String {
-    const L: usize = 1e4 as usize;
     let r = calc_r(input);
     let adj = create_adj(input);
     let mut dist = vec![vec![vec![]; input.n]; input.n];
     let mut s = (0, 0);
-    let mut count_set: BTreeSet<(i64, (usize, usize))> = BTreeSet::new();
-    let mut remain_count = vec![vec![0; input.n]; input.n];
+    let mut counts = vec![vec![0; input.n]; input.n];
+    let mut required_counts = vec![vec![0; input.n]; input.n];
 
     for i in 0..input.n {
         for j in 0..input.n {
             dist[i][j] = calc_dist((i, j), input, &adj);
 
-            remain_count[i][j] = (L as f64 * r[i][j]).round() as i64;
-            count_set.insert((GETA, (i, j)));
+            required_counts[i][j] = (L as f64 * r[i][j]).round() as i64;
 
             if r[i][j] > r[s.0][s.1] {
                 (s.0, s.1) = (i, j);
@@ -33,31 +31,22 @@ pub fn solve(input: &Input) -> String {
         }
     }
 
-    let required_count = remain_count.clone();
-
-    show(&remain_count);
+    show(&counts, &required_counts, input);
 
     let s = s;
-    let cycle_l = (1. / r[s.0][s.1]).round() as i64;
+    let cycle_l = (1.2 / r[s.0][s.1]).round() as i64;
     let cycle_cnt = L / cycle_l as usize;
     let mut cycles = vec![];
 
     // サイクルの作成
     for _ in 0..cycle_cnt {
-        let cycle = create_cycle(
-            s,
-            cycle_l,
-            &dist,
-            &mut count_set,
-            &mut remain_count,
-            &required_count,
-            input,
-            &adj,
-        );
+        let cycle = create_cycle(s, cycle_l, &dist, &mut counts, input, &adj);
+        // show(&counts, &required_count);
+        show_path(&cycle, input.n);
         cycles.push(cycle);
     }
 
-    show(&remain_count);
+    show(&counts, &required_counts, input);
     rnd::shuffle(&mut cycles);
 
     eprintln!("s:           {:?}", s);
@@ -67,13 +56,29 @@ pub fn solve(input: &Input) -> String {
     cycles_to_answer(&cycles)
 }
 
+fn show_path(path: &Vec<(usize, usize)>, n: usize) {
+    let mut a = vec![vec![0; n]; n];
+    for (i, j) in path {
+        a[*i][*j] += 1;
+    }
+    for i in 0..n {
+        for j in 0..n {
+            eprint!("{:2}", a[i][j]);
+        }
+        eprintln!();
+    }
+}
+
+fn calc_gain(count: i64, d: i64) -> f64 {
+    (d as f64 * (1. / (count as f64 + EPS).powf(2.) - 1. / (count as f64 + 1.).powf(2.)))
+        .min(EDGE_WEIGHT as f64 - 1.)
+}
+
 fn create_cycle(
     s: (usize, usize),
     cycle_l: i64,
     dist: &Vec<Vec<Vec<Vec<i64>>>>,
-    count_set: &mut BTreeSet<(i64, (usize, usize))>,
-    remain_count: &mut Vec<Vec<i64>>,
-    required_count: &Vec<Vec<i64>>,
+    counts: &mut Vec<Vec<i64>>,
     input: &Input,
     adj: &Adj,
 ) -> Vec<(usize, usize)> {
@@ -83,15 +88,22 @@ fn create_cycle(
 
     while cycle_l - path.len() as i64 > dist[s.0][s.1][v.0][v.1] {
         let mut last = vec![];
-        let mut iter = count_set.iter();
+        let mut eval = vec![vec![0.; input.n]; input.n];
+        let mut cands = vec![];
+        for i in 0..input.n {
+            for j in 0..input.n {
+                eval[i][j] = calc_gain(counts[i][j], input.d[i][j]);
+                cands.push((eval[i][j], (i, j)));
+            }
+        }
+        cands.sort_by(|a, b| b.partial_cmp(a).unwrap());
         let cand_size = if path.len() == 0 {
-            1
+            2
         } else {
             input.n * input.n / 16
         };
-        for _ in 0..cand_size {
-            let (_, v) = iter.next_back().unwrap();
-            last.push(*v);
+        for i in 0..cand_size {
+            last.push(cands[i].1);
         }
 
         assert!(last.len() > 0);
@@ -101,71 +113,66 @@ fn create_cycle(
             .min_by(|&x, &y| dist[v.0][v.1][x.0][x.1].cmp(&dist[v.0][v.1][y.0][y.1]))
             .unwrap();
 
-        let add_path = shortest_path(&v, target_v, &remain_count, input, &adj);
+        let add_path = shortest_path(&v, target_v, &counts, input, &adj);
         for v in add_path.iter() {
-            if remain_count[v.0][v.1] == USED_CODE {
+            if counts[v.0][v.1] == USED_CODE {
                 continue;
             }
-            rev_counts.push((*v, remain_count[v.0][v.1] - 1));
-            assert!(
-                count_set.remove(&(GETA * remain_count[v.0][v.1] / required_count[v.0][v.1], *v))
-            );
-            remain_count[v.0][v.1] = USED_CODE;
-            count_set.insert((USED_CODE, *v));
+            rev_counts.push((*v, counts[v.0][v.1] + 1));
+            counts[v.0][v.1] = USED_CODE;
         }
         path.extend(add_path);
         v = *target_v;
     }
 
     // vからsに戻る
-    let return_path = shortest_path(&v, &s, &remain_count, input, &adj);
+    let return_path = shortest_path(&v, &s, &counts, input, &adj);
     for v in return_path.iter() {
-        if remain_count[v.0][v.1] == USED_CODE {
+        if counts[v.0][v.1] == USED_CODE {
             continue;
         }
-        rev_counts.push((*v, remain_count[v.0][v.1] - 1));
-        assert!(count_set.remove(&(GETA * remain_count[v.0][v.1] / required_count[v.0][v.1], *v)));
-        remain_count[v.0][v.1] -= 1;
-        count_set.insert((GETA * remain_count[v.0][v.1] / required_count[v.0][v.1], *v));
+        rev_counts.push((*v, counts[v.0][v.1] + 1));
     }
     path.extend(return_path);
 
     for (v, rev_t) in rev_counts {
-        count_set.remove(&(USED_CODE, v));
-        remain_count[v.0][v.1] = rev_t;
-        count_set.insert((GETA * remain_count[v.0][v.1] / required_count[v.0][v.1], v));
+        counts[v.0][v.1] = rev_t;
     }
 
     path
 }
 
-fn show(remain_count: &Vec<Vec<i64>>) {
+fn show(counts: &Vec<Vec<i64>>, required_count: &Vec<Vec<i64>>, input: &Input) {
     eprintln!("-----");
+    let mut lower_bound = 0.;
     let mut sum = 0;
     let mut max = 0;
-    for i in 0..remain_count.len() {
-        for j in 0..remain_count[i].len() {
-            eprint!("{:5}", remain_count[i][j]);
-            if remain_count[i][j] > 0 {
-                max = max.max(remain_count[i][j]);
-                sum += remain_count[i][j];
+    for i in 0..counts.len() {
+        for j in 0..counts[i].len() {
+            lower_bound +=
+                input.d[i][j] as f64 * (L as f64 / (counts[i][j] as f64 + 1e-6)).powf(2.);
+            eprint!("{:4}", required_count[i][j] - counts[i][j]);
+            if required_count[i][j] - counts[i][j] > 0 {
+                max = max.max(required_count[i][j] - counts[i][j]);
+                sum += required_count[i][j] - counts[i][j];
             }
         }
         eprintln!();
     }
-    eprintln!("max: {max}");
-    eprintln!("ave: {:.5}", sum as f64 / remain_count.len().pow(2) as f64);
+    eprintln!("lower:   {:.5}", lower_bound / L as f64);
+    eprintln!("max:     {max}");
+    eprintln!("ave:     {:.5}", sum as f64 / counts.len().pow(2) as f64);
 }
 
 fn shortest_path(
     s: &(usize, usize),
     t: &(usize, usize),
-    remain_count: &Vec<Vec<i64>>,
+    counts: &Vec<Vec<i64>>,
     input: &Input,
     adj: &Adj,
 ) -> Vec<(usize, usize)> {
     use std::cmp::Reverse;
-    let mut dist = vec![vec![1e17 as i64; input.n]; input.n];
+    let mut dist = vec![vec![INF; input.n]; input.n];
     let mut q = BinaryHeap::new();
     q.push((Reverse(0), s));
     dist[s.0][s.1] = 0;
@@ -178,11 +185,7 @@ fn shortest_path(
             continue;
         }
         for (_, u) in adj[v.0][v.1].iter() {
-            let cost = if remain_count[u.0][u.1] <= 0 {
-                INF
-            } else {
-                EDGE_WEIGHT - remain_count[u.0][u.1]
-            };
+            let cost = EDGE_WEIGHT - calc_gain(counts[u.0][u.1], input.d[u.0][u.1]) as i64;
             if dist[u.0][u.1] <= d + cost {
                 continue;
             }
@@ -196,11 +199,7 @@ fn shortest_path(
     let mut cur = *t;
     while cur != *s {
         for (_, u) in adj[cur.0][cur.1].iter() {
-            let cost = if remain_count[cur.0][cur.1] <= 0 {
-                INF
-            } else {
-                EDGE_WEIGHT - remain_count[cur.0][cur.1]
-            };
+            let cost = EDGE_WEIGHT - calc_gain(counts[cur.0][cur.1], input.d[cur.0][cur.1]) as i64;
             if dist[cur.0][cur.1] == dist[u.0][u.1] + cost {
                 path.push(cur);
                 cur = *u;
