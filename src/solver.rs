@@ -6,7 +6,8 @@ use crate::util::*;
 type Adj = Vec<Vec<Vec<(Dir, (usize, usize))>>>;
 
 pub fn solve(input: &Input) -> String {
-    const L: usize = 1e4 as usize;
+    const L: usize = 1e5 as usize;
+    const USED_CODE: i64 = -1e9 as i64;
     let r = calc_r(input);
     let adj = create_adj(input);
     let mut dist = vec![vec![vec![]; input.n]; input.n];
@@ -33,7 +34,7 @@ pub fn solve(input: &Input) -> String {
 
     for i in 0..input.n {
         for j in 0..input.n {
-            eprint!("{:4}", t[i][j]);
+            eprint!("{:5}", t[i][j]);
         }
         eprintln!();
     }
@@ -64,14 +65,19 @@ pub fn solve(input: &Input) -> String {
                 .unwrap();
 
             let next_dir = get_move_cand(v, *target_v, &dist, &adj)
-                .first()
+                .iter()
+                .max_by(|&x, &y| {
+                    let x = x.add(v);
+                    let y = y.add(v);
+                    t[x.0][x.1].cmp(&t[y.0][y.1])
+                })
                 .unwrap()
                 .to_owned();
             v = next_dir.add(v);
             path.push(v);
 
             let count = counts.get_mut(&t[v.0][v.1]).unwrap();
-            if t[v.0][v.1] == -1 {
+            if t[v.0][v.1] == USED_CODE {
                 continue;
             }
             count.remove(&v);
@@ -79,21 +85,29 @@ pub fn solve(input: &Input) -> String {
                 counts.remove(&t[v.0][v.1]);
             }
             rev_counts.push((v, t[v.0][v.1] - 1));
-            t[v.0][v.1] = -1;
-            if let Some(count) = counts.get_mut(&-1) {
+            t[v.0][v.1] = USED_CODE;
+            if let Some(count) = counts.get_mut(&USED_CODE) {
                 count.insert(v);
             } else {
-                counts.insert(-1, HashSet::from([v]));
+                counts.insert(USED_CODE, HashSet::from([v]));
             }
         }
 
         while v != s {
-            let next_dir = get_move_cand(v, s, &dist, &adj).first().unwrap().to_owned();
+            let next_dir = get_move_cand(v, s, &dist, &adj)
+                .iter()
+                .max_by(|&x, &y| {
+                    let x = x.add(v);
+                    let y = y.add(v);
+                    t[x.0][x.1].cmp(&t[y.0][y.1])
+                })
+                .unwrap()
+                .to_owned();
             v = next_dir.add(v);
             path.push(v);
         }
 
-        if let Some(count) = counts.get_mut(&-1) {
+        if let Some(count) = counts.get_mut(&USED_CODE) {
             count.clear();
         }
 
@@ -105,18 +119,22 @@ pub fn solve(input: &Input) -> String {
                 counts.insert(rev_t, HashSet::from([v]));
             }
         }
-        eprintln!("{:?}", path);
+        // eprintln!("{:?}", path);
         cycles.push(path);
     }
 
+    eprintln!("-----");
     for i in 0..input.n {
         for j in 0..input.n {
-            eprint!("{:4}", t[i][j]);
+            eprint!("{:5}", t[i][j]);
         }
         eprintln!();
     }
 
-    // rnd::shuffle(&mut cycles);
+    eprintln!("s:           {:?}", s);
+    eprintln!("cycle_l:     {cycle_l}");
+    eprintln!("cycle_cnt:   {cycle_cnt}");
+    rnd::shuffle(&mut cycles);
 
     cycles_to_answer(&cycles)
 }
