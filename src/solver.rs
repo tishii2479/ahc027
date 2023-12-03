@@ -1,3 +1,4 @@
+use std::collections::BinaryHeap;
 use std::collections::{BTreeSet, VecDeque};
 
 use crate::def::*;
@@ -12,15 +13,15 @@ pub fn solve(input: &Input) -> String {
     let adj = create_adj(input);
     let mut dist = vec![vec![vec![]; input.n]; input.n];
     let mut s = (0, 0);
-    let mut counts: BTreeSet<(i64, (usize, usize))> = BTreeSet::new();
-    let mut t = vec![vec![0; input.n]; input.n];
+    let mut count_set: BTreeSet<(i64, (usize, usize))> = BTreeSet::new();
+    let mut remain_count = vec![vec![0; input.n]; input.n];
 
     for i in 0..input.n {
         for j in 0..input.n {
             dist[i][j] = calc_dist((i, j), input, &adj);
 
-            t[i][j] = (L as f64 * r[i][j]).round() as i64;
-            counts.insert((t[i][j], (i, j)));
+            remain_count[i][j] = (L as f64 * r[i][j]).round() as i64;
+            count_set.insert((remain_count[i][j], (i, j)));
 
             if r[i][j] > r[s.0][s.1] {
                 (s.0, s.1) = (i, j);
@@ -28,29 +29,32 @@ pub fn solve(input: &Input) -> String {
         }
     }
 
+    let required_count = remain_count.clone();
+
     for i in 0..input.n {
         for j in 0..input.n {
-            eprint!("{:5}", t[i][j]);
+            eprint!("{:5}", remain_count[i][j]);
         }
         eprintln!();
     }
 
     let s = s;
-    let cycle_l = (1. / r[s.0][s.1]).round() as usize;
-    let cycle_cnt = L / cycle_l;
+    let cycle_l = (1. / r[s.0][s.1]).round() as i64;
+    let cycle_cnt = L / cycle_l as usize;
     let mut cycles = vec![];
 
     // サイクルの作成
-    for _ in 0..cycle_cnt {
+    for t in 0..cycle_cnt {
         let mut v = (s.0, s.1);
         let mut path = vec![];
         let mut rev_counts = vec![];
-        while cycle_l - path.len() > dist[s.0][s.1][v.0][v.1] as usize {
+        while cycle_l - path.len() as i64 > dist[s.0][s.1][v.0][v.1] {
             let mut last = vec![];
-            let mut iter = counts.iter();
+            let mut iter = count_set.iter();
             for _ in 0..input.n * input.n / 16 {
-                let (_, v) = iter.next_back().unwrap();
+                let (s, v) = iter.next_back().unwrap();
                 last.push(*v);
+                eprintln!("{:?} {:?}", s, v);
             }
 
             assert!(last.len() > 0);
@@ -60,55 +64,41 @@ pub fn solve(input: &Input) -> String {
                 .min_by(|&x, &y| dist[v.0][v.1][x.0][x.1].cmp(&dist[v.0][v.1][y.0][y.1]))
                 .unwrap();
 
-            let next_dir = get_move_cand(v, *target_v, &dist, &adj)
-                .iter()
-                .max_by(|&x, &y| {
-                    let x = x.add(v);
-                    let y = y.add(v);
-                    t[x.0][x.1].cmp(&t[y.0][y.1])
-                })
-                .unwrap()
-                .to_owned();
-            v = next_dir.add(v);
-            path.push(v);
-
-            if t[v.0][v.1] == USED_CODE {
-                continue;
+            let add_path = shortest_path(&v, target_v, &remain_count, input, &adj);
+            for v in add_path.iter() {
+                if remain_count[v.0][v.1] == USED_CODE {
+                    continue;
+                }
+                rev_counts.push((*v, remain_count[v.0][v.1] - 1));
+                assert!(count_set.remove(&(remain_count[v.0][v.1], *v)));
+                remain_count[v.0][v.1] = USED_CODE;
+                count_set.insert((USED_CODE, *v));
             }
-            counts.remove(&(t[v.0][v.1], v));
-            rev_counts.push((v, t[v.0][v.1] - 1));
-            t[v.0][v.1] = USED_CODE;
-            counts.insert((USED_CODE, v));
+            path.extend(add_path);
+            v = *target_v;
         }
 
         // vからsに戻る
-        while v != s {
-            let next_dir = get_move_cand(v, s, &dist, &adj)
-                .iter()
-                .max_by(|&x, &y| {
-                    let x = x.add(v);
-                    let y = y.add(v);
-                    t[x.0][x.1].cmp(&t[y.0][y.1])
-                })
-                .unwrap()
-                .to_owned();
-            v = next_dir.add(v);
-            path.push(v);
-
-            if t[v.0][v.1] == USED_CODE {
+        let return_path = shortest_path(&v, &s, &remain_count, input, &adj);
+        for v in return_path.iter() {
+            if remain_count[v.0][v.1] == USED_CODE {
                 continue;
             }
-            counts.remove(&(t[v.0][v.1], v));
-            rev_counts.push((v, t[v.0][v.1] - 1));
-            t[v.0][v.1] = USED_CODE;
-            counts.insert((USED_CODE, v));
+            rev_counts.push((*v, remain_count[v.0][v.1] - 1));
+            assert!(count_set.remove(&(remain_count[v.0][v.1], *v)));
+            remain_count[v.0][v.1] -= 1;
+            count_set.insert((remain_count[v.0][v.1], *v));
         }
+        path.extend(return_path);
+
+        eprintln!("[{}/{}] add_path: {}", t, cycle_cnt, path.len());
 
         for (v, rev_t) in rev_counts {
-            counts.remove(&(USED_CODE, v));
-            t[v.0][v.1] = rev_t;
-            counts.insert((rev_t, v));
+            count_set.remove(&(USED_CODE, v));
+            remain_count[v.0][v.1] = rev_t;
+            count_set.insert((rev_t, v));
         }
+
         cycles.push(path);
     }
 
@@ -117,7 +107,7 @@ pub fn solve(input: &Input) -> String {
     eprintln!("-----");
     for i in 0..input.n {
         for j in 0..input.n {
-            eprint!("{:5}", t[i][j]);
+            eprint!("{:5}", remain_count[i][j]);
         }
         eprintln!();
     }
@@ -127,6 +117,57 @@ pub fn solve(input: &Input) -> String {
     eprintln!("cycle_cnt:   {cycle_cnt}");
 
     cycles_to_answer(&cycles)
+}
+
+fn shortest_path(
+    s: &(usize, usize),
+    t: &(usize, usize),
+    remain_count: &Vec<Vec<i64>>,
+    input: &Input,
+    adj: &Adj,
+) -> Vec<(usize, usize)> {
+    use std::cmp::Reverse;
+    const INF: i64 = 1e12 as i64;
+    const EDGE_WEIGHT: i64 = 1e6 as i64; // NOTE: USED_CODEより小さくあるべき
+    let mut dist = vec![vec![INF; input.n]; input.n];
+    let mut q = BinaryHeap::new();
+    q.push((Reverse(0), s));
+    dist[s.0][s.1] = 0;
+    while let Some((Reverse(d), v)) = q.pop() {
+        if v == t {
+            // tまで探索が終わっていたら打ち切る
+            break;
+        }
+        if d > dist[v.0][v.1] {
+            continue;
+        }
+        for (_, u) in adj[v.0][v.1].iter() {
+            let cost = EDGE_WEIGHT - remain_count[u.0][u.1];
+            if dist[u.0][u.1] <= d + cost {
+                continue;
+            }
+            dist[u.0][u.1] = d + cost;
+            q.push((Reverse(dist[u.0][u.1]), u));
+        }
+    }
+
+    // 復元
+    let mut path = vec![];
+    let mut cur = *t;
+    while cur != *s {
+        for (_, u) in adj[cur.0][cur.1].iter() {
+            let cost = EDGE_WEIGHT - remain_count[cur.0][cur.1];
+            if dist[cur.0][cur.1] == dist[u.0][u.1] + cost {
+                path.push(cur);
+                cur = *u;
+                break;
+            }
+        }
+    }
+    path.reverse();
+
+    eprintln!("{:?} {:?} {}", s, t, path.len());
+    path
 }
 
 fn cycles_to_answer(cycles: &Vec<Vec<(usize, usize)>>) -> String {
