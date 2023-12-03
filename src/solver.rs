@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, VecDeque};
 
 use crate::def::*;
 use crate::util::*;
@@ -6,13 +6,13 @@ use crate::util::*;
 type Adj = Vec<Vec<Vec<(Dir, (usize, usize))>>>;
 
 pub fn solve(input: &Input) -> String {
-    const L: usize = 1e5 as usize;
+    const L: usize = 1e4 as usize;
     const USED_CODE: i64 = -1e9 as i64;
     let r = calc_r(input);
     let adj = create_adj(input);
     let mut dist = vec![vec![vec![]; input.n]; input.n];
     let mut s = (0, 0);
-    let mut counts: BTreeMap<i64, HashSet<(usize, usize)>> = BTreeMap::new();
+    let mut counts: BTreeSet<(i64, (usize, usize))> = BTreeSet::new();
     let mut t = vec![vec![0; input.n]; input.n];
 
     for i in 0..input.n {
@@ -20,11 +20,7 @@ pub fn solve(input: &Input) -> String {
             dist[i][j] = calc_dist((i, j), input, &adj);
 
             t[i][j] = (L as f64 * r[i][j]).round() as i64;
-            if let Some(count) = counts.get_mut(&t[i][j]) {
-                count.insert((i, j));
-            } else {
-                counts.insert(t[i][j], HashSet::from([(i, j)]));
-            }
+            counts.insert((t[i][j], (i, j)));
 
             if r[i][j] > r[s.0][s.1] {
                 (s.0, s.1) = (i, j);
@@ -50,11 +46,11 @@ pub fn solve(input: &Input) -> String {
         let mut path = vec![];
         let mut rev_counts = vec![];
         while cycle_l - path.len() > dist[s.0][s.1][v.0][v.1] as usize {
-            let mut last = counts.iter().last().unwrap().1;
-            if last.len() == 1 && last.contains(&v) {
-                let mut iter = counts.iter();
-                iter.next_back();
-                last = iter.next_back().unwrap().1;
+            let mut last = vec![];
+            let mut iter = counts.iter();
+            for _ in 0..input.n * input.n / 16 {
+                let (_, v) = iter.next_back().unwrap();
+                last.push(*v);
             }
 
             assert!(last.len() > 0);
@@ -76,23 +72,16 @@ pub fn solve(input: &Input) -> String {
             v = next_dir.add(v);
             path.push(v);
 
-            let count = counts.get_mut(&t[v.0][v.1]).unwrap();
             if t[v.0][v.1] == USED_CODE {
                 continue;
             }
-            count.remove(&v);
-            if count.len() == 0 {
-                counts.remove(&t[v.0][v.1]);
-            }
+            counts.remove(&(t[v.0][v.1], v));
             rev_counts.push((v, t[v.0][v.1] - 1));
             t[v.0][v.1] = USED_CODE;
-            if let Some(count) = counts.get_mut(&USED_CODE) {
-                count.insert(v);
-            } else {
-                counts.insert(USED_CODE, HashSet::from([v]));
-            }
+            counts.insert((USED_CODE, v));
         }
 
+        // vからsに戻る
         while v != s {
             let next_dir = get_move_cand(v, s, &dist, &adj)
                 .iter()
@@ -105,23 +94,25 @@ pub fn solve(input: &Input) -> String {
                 .to_owned();
             v = next_dir.add(v);
             path.push(v);
-        }
 
-        if let Some(count) = counts.get_mut(&USED_CODE) {
-            count.clear();
+            if t[v.0][v.1] == USED_CODE {
+                continue;
+            }
+            counts.remove(&(t[v.0][v.1], v));
+            rev_counts.push((v, t[v.0][v.1] - 1));
+            t[v.0][v.1] = USED_CODE;
+            counts.insert((USED_CODE, v));
         }
 
         for (v, rev_t) in rev_counts {
+            counts.remove(&(USED_CODE, v));
             t[v.0][v.1] = rev_t;
-            if let Some(count) = counts.get_mut(&rev_t) {
-                count.insert(v);
-            } else {
-                counts.insert(rev_t, HashSet::from([v]));
-            }
+            counts.insert((rev_t, v));
         }
-        // eprintln!("{:?}", path);
         cycles.push(path);
     }
+
+    rnd::shuffle(&mut cycles);
 
     eprintln!("-----");
     for i in 0..input.n {
@@ -134,7 +125,6 @@ pub fn solve(input: &Input) -> String {
     eprintln!("s:           {:?}", s);
     eprintln!("cycle_l:     {cycle_l}");
     eprintln!("cycle_cnt:   {cycle_cnt}");
-    rnd::shuffle(&mut cycles);
 
     cycles_to_answer(&cycles)
 }
