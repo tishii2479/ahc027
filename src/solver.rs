@@ -9,6 +9,7 @@ type Adj = Vec<Vec<Vec<(Dir, (usize, usize))>>>;
 pub fn solve(input: &Input) -> String {
     const L: usize = 1e4 as usize;
     const USED_CODE: i64 = -1e9 as i64;
+    const GETA: i64 = 1e5 as i64;
     let r = calc_r(input);
     let adj = create_adj(input);
     let mut dist = vec![vec![vec![]; input.n]; input.n];
@@ -21,7 +22,7 @@ pub fn solve(input: &Input) -> String {
             dist[i][j] = calc_dist((i, j), input, &adj);
 
             remain_count[i][j] = (L as f64 * r[i][j]).round() as i64;
-            count_set.insert((remain_count[i][j], (i, j)));
+            count_set.insert((GETA, (i, j)));
 
             if r[i][j] > r[s.0][s.1] {
                 (s.0, s.1) = (i, j);
@@ -44,17 +45,21 @@ pub fn solve(input: &Input) -> String {
     let mut cycles = vec![];
 
     // サイクルの作成
-    for t in 0..cycle_cnt {
+    for _ in 0..cycle_cnt {
         let mut v = (s.0, s.1);
         let mut path = vec![];
         let mut rev_counts = vec![];
         while cycle_l - path.len() as i64 > dist[s.0][s.1][v.0][v.1] {
             let mut last = vec![];
             let mut iter = count_set.iter();
-            for _ in 0..input.n * input.n / 16 {
-                let (s, v) = iter.next_back().unwrap();
+            let cand_size = if path.len() == 0 {
+                1
+            } else {
+                input.n * input.n / 16
+            };
+            for _ in 0..cand_size {
+                let (_, v) = iter.next_back().unwrap();
                 last.push(*v);
-                eprintln!("{:?} {:?}", s, v);
             }
 
             assert!(last.len() > 0);
@@ -70,7 +75,8 @@ pub fn solve(input: &Input) -> String {
                     continue;
                 }
                 rev_counts.push((*v, remain_count[v.0][v.1] - 1));
-                assert!(count_set.remove(&(remain_count[v.0][v.1], *v)));
+                assert!(count_set
+                    .remove(&(GETA * remain_count[v.0][v.1] / required_count[v.0][v.1], *v)));
                 remain_count[v.0][v.1] = USED_CODE;
                 count_set.insert((USED_CODE, *v));
             }
@@ -85,18 +91,18 @@ pub fn solve(input: &Input) -> String {
                 continue;
             }
             rev_counts.push((*v, remain_count[v.0][v.1] - 1));
-            assert!(count_set.remove(&(remain_count[v.0][v.1], *v)));
+            assert!(
+                count_set.remove(&(GETA * remain_count[v.0][v.1] / required_count[v.0][v.1], *v))
+            );
             remain_count[v.0][v.1] -= 1;
-            count_set.insert((remain_count[v.0][v.1], *v));
+            count_set.insert((GETA * remain_count[v.0][v.1] / required_count[v.0][v.1], *v));
         }
         path.extend(return_path);
-
-        eprintln!("[{}/{}] add_path: {}", t, cycle_cnt, path.len());
 
         for (v, rev_t) in rev_counts {
             count_set.remove(&(USED_CODE, v));
             remain_count[v.0][v.1] = rev_t;
-            count_set.insert((rev_t, v));
+            count_set.insert((GETA * remain_count[v.0][v.1] / required_count[v.0][v.1], v));
         }
 
         cycles.push(path);
@@ -165,8 +171,6 @@ fn shortest_path(
         }
     }
     path.reverse();
-
-    eprintln!("{:?} {:?} {}", s, t, path.len());
     path
 }
 
