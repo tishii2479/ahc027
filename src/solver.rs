@@ -35,15 +35,15 @@ pub fn solve(input: &Input) -> String {
     show(&counts, &required_counts, input);
 
     let s = s;
-    let cycle_l = (1. / r[s.0][s.1]).round() as usize;
-    let cycle_cnt = L / cycle_l;
+    let ideal_cycle_l = (1. / r[s.0][s.1]).round() as usize;
+    let cycle_cnt = L / ideal_cycle_l;
     let mut cycles = vec![];
 
     // サイクルの作成
     for _ in 0..cycle_cnt {
         let cycle = create_cycle(
             s,
-            cycle_l,
+            ideal_cycle_l,
             &dist,
             &required_counts,
             &mut counts,
@@ -56,13 +56,13 @@ pub fn solve(input: &Input) -> String {
     show(&counts, &required_counts, input);
 
     rnd::shuffle(&mut cycles);
-    let use_cycles = optimize_cycles(cycle_cnt, cycle_l, &cycles, input);
+    let use_cycles = optimize_cycles(cycle_cnt, ideal_cycle_l, &cycles, input);
     let cycles = use_cycles.iter().map(|&i| cycles[i].clone()).collect();
 
     let ans = cycles_to_answer(&cycles);
 
     eprintln!("s:               {:?}", s);
-    eprintln!("cycle_l:         {cycle_l}");
+    eprintln!("ideal_cycle_l:   {ideal_cycle_l}");
     eprintln!("cycle_cnt:       {cycle_cnt}");
     eprintln!("total_length:    {}", ans.len());
 
@@ -201,9 +201,8 @@ fn optimize_cycles(
         }
 
         if score < prev_score {
-            eprintln!("adopt: {prev_score} -> {score} {c_a} {c_b}");
+            // eprintln!("adopt: {prev_score} -> {score} {c_a} {c_b}");
         } else {
-            // eprintln!("not adopt: {prev_score} -> {score} {c_a} {c_b}");
             // 取り除く
             for c_i in [c_a, c_b] {
                 if cycle_status[c_i] == UNUSED {
@@ -230,7 +229,6 @@ fn optimize_cycles(
                     score += calc_delta(index, &ps[v.0][v.1], total_cycle_length, true);
                 }
             }
-            // assert_eq!(score, prev_score);
         }
     }
 
@@ -248,15 +246,15 @@ fn optimize_cycles(
 
 fn create_cycle(
     s: (usize, usize),
-    cycle_l: usize,
+    ideal_cycle_l: usize,
     dist: &Vec<Vec<Vec<Vec<i64>>>>,
     required_counts: &Vec<Vec<i64>>,
     counts: &mut Vec<Vec<i64>>,
     input: &Input,
     adj: &Adj,
 ) -> Vec<(usize, usize)> {
-    const COUNT_SIZE: usize = 10;
-    const GAIN_SIZE: usize = 15;
+    const COUNT_SIZE: usize = 40;
+    const GAIN_SIZE: usize = 30;
 
     let mut gain_cand = vec![];
     let mut count_cand = vec![];
