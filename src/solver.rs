@@ -167,37 +167,38 @@ fn create_cycle(
     input: &Input,
     adj: &Adj,
 ) -> Vec<(usize, usize)> {
-    const TARGET_SIZE: usize = 30;
-    const PICK_UP: usize = 10;
+    const COUNT_SIZE: usize = 20;
+    const GAIN_SIZE: usize = 5;
 
-    let mut unvisited = vec![];
-    let mut cand = vec![];
+    let mut gain_cand = vec![];
+    let mut count_cand = vec![];
     for i in 0..input.n {
         for j in 0..input.n {
-            if counts[i][j] == 0 {
-                unvisited.push((i, j));
-            }
-            cand.push((required_counts[i][j] - counts[i][j], (i, j)));
+            gain_cand.push((calc_gain(counts[i][j], input.d[i][j]), (i, j)));
+            count_cand.push((required_counts[i][j] - counts[i][j], (i, j)));
         }
     }
-    let mut v = vec![s];
+    let mut selected_v = vec![s];
 
-    rnd::shuffle(&mut unvisited);
-    for i in 0..PICK_UP.min(unvisited.len()) {
-        v.push(unvisited[i]);
+    gain_cand.sort_by(|a, b| b.partial_cmp(a).unwrap());
+    for i in 0..GAIN_SIZE {
+        selected_v.push(gain_cand[i].1);
     }
-    cand.sort_by(|a, b| b.cmp(a));
-    for i in 0..TARGET_SIZE {
-        if v.contains(&cand[i].1) {
+    count_cand.sort_by(|a, b| b.cmp(a));
+    for i in 0..COUNT_SIZE {
+        if selected_v.contains(&count_cand[i].1) {
             continue;
         }
-        v.push(cand[i].1);
+        selected_v.push(count_cand[i].1);
     }
 
     let mut rev_counts = vec![];
-    let (order, dist_sum) = solve_tsp(&v, dist);
+    let (order, dist_sum) = solve_tsp(&selected_v, dist);
     let p = order.iter().position(|x| x == &0).unwrap();
-    let order: Vec<(usize, usize)> = order.iter().map(|&i| v[(i + p) % v.len()]).collect();
+    let order: Vec<(usize, usize)> = order
+        .iter()
+        .map(|&i| selected_v[(i + p) % selected_v.len()])
+        .collect();
     let mut cycle = vec![];
     for i in 0..order.len() {
         let path = find_best_path(
