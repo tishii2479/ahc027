@@ -1,4 +1,4 @@
-use std::collections::{BinaryHeap, VecDeque};
+use std::collections::VecDeque;
 
 use crate::def::*;
 use crate::util::*;
@@ -40,7 +40,7 @@ pub fn solve(input: &Input) -> String {
 
     // サイクルの作成
     for _ in 0..cycle_cnt {
-        let cycle = create_cycle2(
+        let cycle = create_cycle(
             s,
             cycle_l,
             &dist,
@@ -158,7 +158,7 @@ fn find_best_path(
     path
 }
 
-fn create_cycle2(
+fn create_cycle(
     s: (usize, usize),
     cycle_l: i64,
     dist: &Vec<Vec<Vec<Vec<i64>>>>,
@@ -226,121 +226,6 @@ fn create_cycle2(
     show_path(&cycle, input.n);
     eprintln!("{}", cycle.len());
     cycle
-}
-
-fn create_cycle(
-    s: (usize, usize),
-    cycle_l: i64,
-    dist: &Vec<Vec<Vec<Vec<i64>>>>,
-    counts: &mut Vec<Vec<i64>>,
-    input: &Input,
-    adj: &Adj,
-) -> Vec<(usize, usize)> {
-    let mut v = (s.0, s.1);
-    let mut path = vec![];
-    let mut rev_counts = vec![];
-
-    while cycle_l - path.len() as i64 > dist[s.0][s.1][v.0][v.1] {
-        let mut last = vec![];
-        let mut eval = vec![vec![0.; input.n]; input.n];
-        let mut cands = vec![];
-        for i in 0..input.n {
-            for j in 0..input.n {
-                eval[i][j] = calc_gain(counts[i][j], input.d[i][j]);
-                cands.push((eval[i][j], (i, j)));
-            }
-        }
-        cands.sort_by(|a, b| b.partial_cmp(a).unwrap());
-        let cand_size = if path.len() == 0 {
-            2
-        } else {
-            input.n * input.n / 16
-        };
-        for i in 0..cand_size {
-            last.push(cands[i].1);
-        }
-
-        assert!(last.len() > 0);
-        let target_v = last
-            .iter()
-            .filter(|&x| x != &v)
-            .min_by(|&x, &y| dist[v.0][v.1][x.0][x.1].cmp(&dist[v.0][v.1][y.0][y.1]))
-            .unwrap();
-
-        let add_path = shortest_path(&v, target_v, &counts, input, &adj);
-        for v in add_path.iter() {
-            if counts[v.0][v.1] == USED_CODE {
-                continue;
-            }
-            rev_counts.push((*v, counts[v.0][v.1] + 1));
-            counts[v.0][v.1] = USED_CODE;
-        }
-        path.extend(add_path);
-        v = *target_v;
-    }
-
-    // vからsに戻る
-    let return_path = shortest_path(&v, &s, &counts, input, &adj);
-    for v in return_path.iter() {
-        if counts[v.0][v.1] == USED_CODE {
-            continue;
-        }
-        rev_counts.push((*v, counts[v.0][v.1] + 1));
-    }
-    path.extend(return_path);
-
-    for (v, rev_t) in rev_counts {
-        counts[v.0][v.1] = rev_t;
-    }
-
-    path
-}
-
-fn shortest_path(
-    s: &(usize, usize),
-    t: &(usize, usize),
-    counts: &Vec<Vec<i64>>,
-    input: &Input,
-    adj: &Adj,
-) -> Vec<(usize, usize)> {
-    use std::cmp::Reverse;
-    let mut dist = vec![vec![INF; input.n]; input.n];
-    let mut q = BinaryHeap::new();
-    q.push((Reverse(0), s));
-    dist[s.0][s.1] = 0;
-    while let Some((Reverse(d), v)) = q.pop() {
-        if v == t {
-            // tまで探索が終わっていたら打ち切る
-            break;
-        }
-        if d > dist[v.0][v.1] {
-            continue;
-        }
-        for (_, u) in adj[v.0][v.1].iter() {
-            let cost = EDGE_WEIGHT - calc_gain(counts[u.0][u.1], input.d[u.0][u.1]) as i64;
-            if dist[u.0][u.1] <= d + cost {
-                continue;
-            }
-            dist[u.0][u.1] = d + cost;
-            q.push((Reverse(dist[u.0][u.1]), u));
-        }
-    }
-
-    // 復元
-    let mut path = vec![];
-    let mut cur = *t;
-    while cur != *s {
-        for (_, u) in adj[cur.0][cur.1].iter() {
-            let cost = EDGE_WEIGHT - calc_gain(counts[cur.0][cur.1], input.d[cur.0][cur.1]) as i64;
-            if dist[cur.0][cur.1] == dist[u.0][u.1] + cost {
-                path.push(cur);
-                cur = *u;
-                break;
-            }
-        }
-    }
-    path.reverse();
-    path
 }
 
 fn cycles_to_answer(cycles: &Vec<Vec<(usize, usize)>>) -> String {
@@ -423,22 +308,6 @@ fn calc_dist(s: (usize, usize), input: &Input, adj: &Adj) -> Vec<Vec<i64>> {
 fn calc_gain(count: i64, d: i64) -> f64 {
     (d as f64 * (1. / (count as f64 + EPS).powf(2.) - 1. / (count as f64 + 1.).powf(2.)))
         .min(EDGE_WEIGHT as f64 - 1.)
-}
-
-#[allow(unused)]
-fn get_move_cand(
-    s: (usize, usize),
-    t: (usize, usize),
-    dist: &Vec<Vec<Vec<Vec<i64>>>>,
-    adj: &Adj,
-) -> Vec<Dir> {
-    let mut v = vec![];
-    for (dir, nxt) in adj[s.0][s.1].iter() {
-        if dist[t.0][t.1][s.0][s.1] == dist[t.0][t.1][nxt.0][nxt.1] + 1 {
-            v.push(dir.to_owned());
-        }
-    }
-    v
 }
 
 #[allow(unused)]
