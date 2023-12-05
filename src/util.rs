@@ -1,5 +1,7 @@
 #![allow(unused)]
 
+use std::cmp::Ordering;
+
 pub mod rnd {
     static mut S: usize = 88172645463325252;
 
@@ -51,3 +53,14 @@ pub mod time {
         }
     }
 }
+
+#[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
+pub struct FloatIndex(pub f64);
+
+impl Ord for FloatIndex {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
+impl Eq for FloatIndex {}
