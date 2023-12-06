@@ -16,7 +16,7 @@ if __name__ == "__main__":
     )
     subprocess.run(f"pbcopy < tools/out/{file}.txt", shell=True)
 
-    # subprocess.run(
-    #     f"python3 main.py < tools/in/{file}.txt > tools/out/{file}.txt && ./tools/target/release/vis tools/in/{file}.txt tools/out/{file}.txt",
-    #     shell=True,
-    # )
+    subprocess.run(
+        f"python3 baseline.py < tools/in/{file}.txt > tools/out/py-{file}.txt && ./tools/target/release/vis tools/in/{file}.txt tools/out/py-{file}.txt",
+        shell=True,
+    )

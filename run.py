@@ -164,11 +164,13 @@ def evaluate_relative_score(
 
     logger.info(f"Raw score mean: {score_df.score.mean()}")
     logger.info(f"Relative score mean: {score_df['relative_score'].mean()}")
-    logger.info("Top 30 improvements:")
-    logger.info(score_df.sort_values(by="relative_score", ascending=False)[:30])
-    logger.info("Top 30 aggravations:")
-    logger.info(score_df.sort_values(by="relative_score")[:30])
-    logger.info(f"Longest duration: {score_df.sort_values(by='duration')[-1]}")
+    logger.info("Top 10 improvements:")
+    logger.info(score_df.sort_values(by="relative_score", ascending=False)[:10])
+    logger.info("Top 10 aggravations:")
+    logger.info(score_df.sort_values(by="relative_score")[:10])
+    logger.info(
+        f"Longest duration: {score_df.sort_values(by='duration').iloc[-1].duration}"
+    )
 
     if columns is not None:
         assert 1 <= len(columns) <= 2
@@ -201,9 +203,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.eval:
-        evaluate_absolute_score(
-            args.solver_version,
-            args.database_csv,
+        evaluate_relative_score(
+            solver_version=args.solver_version,
+            benchmark_solver_version=args.benchmark_solver_version,
+            database_csv=args.database_csv,
         )
     else:
         subprocess.run("cargo build --features local --release", shell=True)
@@ -217,7 +220,8 @@ if __name__ == "__main__":
             args.case_num,
             args.database_csv,
         )
-        evaluate_absolute_score(
-            args.solver_version,
-            args.database_csv,
+        evaluate_relative_score(
+            solver_version=args.solver_version,
+            benchmark_solver_version=args.benchmark_solver_version,
+            database_csv=args.database_csv,
         )
