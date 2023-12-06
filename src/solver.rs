@@ -14,14 +14,11 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
     let adj = create_adj(input);
     let mut dist = vec![vec![vec![]; input.n]; input.n];
     let mut s = (0, 0);
-    let mut required_counts = vec![vec![0; input.n]; input.n];
-    let mut prev = vec![vec![0; input.n]; input.n];
+    let mut prev = vec![vec![-(TOTAL_LENGTH as i64) / 2; input.n]; input.n];
 
     for i in 0..input.n {
         for j in 0..input.n {
             dist[i][j] = calc_dist((i, j), input, &adj);
-            required_counts[i][j] = (TOTAL_LENGTH as f64 * r[i][j]).round() as i64;
-
             if r[i][j] > r[s.0][s.1] {
                 (s.0, s.1) = (i, j);
             }
@@ -32,7 +29,7 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
 
     let s = s;
     let mut t = 0;
-    let ideal_cycle_l = (1.2 / r[s.0][s.1]).round() as usize;
+    let ideal_cycle_l = (1. / r[s.0][s.1]).round() as usize;
     let cycle_cnt = TOTAL_LENGTH / ideal_cycle_l;
     let mut cycles = vec![];
 
@@ -69,22 +66,24 @@ fn create_cycle(
     input: &Input,
     adj: &Adj,
 ) -> Vec<(usize, usize)> {
-    let gain_size: usize = input.n * input.n / 8;
-
+    const TSP_ITER_CNT: usize = 100000;
     let mut gain_cand = vec![];
     for i in 0..input.n {
         for j in 0..input.n {
-            gain_cand.push((calc_gain2(t, prev[i][j], input.d[i][j]), (i, j)));
+            gain_cand.push((
+                calc_gain(t + ideal_cycle_l as i64 / 2, prev[i][j], input.d[i][j]),
+                (i, j),
+            ));
         }
     }
-    let mut selected_v = vec![s];
-
     gain_cand.sort_by(|a, b| b.partial_cmp(a).unwrap());
+
+    let mut selected_v = vec![s];
+    let gain_size: usize = input.n * input.n / 12;
     for i in 0..gain_size {
         selected_v.push(gain_cand[i].1);
     }
-
-    let (order, _) = solve_tsp(&selected_v, dist);
+    let (order, _) = solve_tsp(&selected_v, dist, TSP_ITER_CNT);
     let p = order.iter().position(|x| x == &0).unwrap();
     let order: Vec<(usize, usize)> = order
         .iter()
@@ -136,7 +135,7 @@ fn find_best_path(
             if !is_closer {
                 continue;
             }
-            let new_val = dp[v.0][v.1] + calc_gain2(t, prev[u.0][u.1], input.d[u.0][u.1]);
+            let new_val = dp[v.0][v.1] + calc_gain(t, prev[u.0][u.1], input.d[u.0][u.1]);
             if new_val > dp[u.0][u.1] {
                 dp[u.0][u.1] = new_val;
                 q.push_back((*u, dp[u.0][u.1]));
@@ -148,7 +147,7 @@ fn find_best_path(
     let mut path = vec![];
     let mut cur = to;
     while cur != from {
-        let gain = calc_gain2(t, prev[cur.0][cur.1], input.d[cur.0][cur.1]);
+        let gain = calc_gain(t, prev[cur.0][cur.1], input.d[cur.0][cur.1]);
         let (_, nxt) = adj[cur.0][cur.1]
             .iter()
             .filter(|(_, u)| dist[from.0][from.1][u.0][u.1] < dist[from.0][from.1][cur.0][cur.1])
@@ -288,8 +287,11 @@ fn optimize_cycles(
     cycle_order
 }
 
-fn solve_tsp(v: &Vec<(usize, usize)>, dist: &Vec<Vec<Vec<Vec<i64>>>>) -> (Vec<usize>, i64) {
-    const LOOP_COUNT: usize = 10000;
+fn solve_tsp(
+    v: &Vec<(usize, usize)>,
+    dist: &Vec<Vec<Vec<Vec<i64>>>>,
+    iter_cnt: usize,
+) -> (Vec<usize>, i64) {
     let n = v.len();
     let mut order: Vec<usize> = (0..n).map(|x| x).collect();
     let mut score = 0;
@@ -298,7 +300,7 @@ fn solve_tsp(v: &Vec<(usize, usize)>, dist: &Vec<Vec<Vec<Vec<i64>>>>) -> (Vec<us
         score += dist[v[i].0][v[i].1][v[j].0][v[j].1];
     }
 
-    for _ in 0..=LOOP_COUNT {
+    for _t in 0..=iter_cnt {
         let (a, b) = (rnd::gen_range(0, n), rnd::gen_range(0, n));
         if a == b {
             continue;
@@ -321,6 +323,10 @@ fn solve_tsp(v: &Vec<(usize, usize)>, dist: &Vec<Vec<Vec<Vec<i64>>>>) -> (Vec<us
             }
             score += score_delta;
         }
+
+        // if _t % (iter_cnt / 10) == 0 {
+        //     eprintln!("{} {}", _t, score);
+        // }
     }
 
     (order, score)
@@ -428,7 +434,7 @@ fn calc_dist(s: (usize, usize), input: &Input, adj: &Adj) -> Vec<Vec<i64>> {
     dist
 }
 
-fn calc_gain2(t: i64, prev: i64, d: i64) -> i64 {
+fn calc_gain(t: i64, prev: i64, d: i64) -> i64 {
     (t - prev).pow(2) * d
 }
 

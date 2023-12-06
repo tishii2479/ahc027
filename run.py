@@ -184,10 +184,18 @@ def evaluate_relative_score(
             )
 
 
+def list_solvers(database_csv: str) -> None:
+    database_df = pd.read_csv(database_csv)
+    logger.info(
+        database_df.groupby("solver_version")["score"].agg("mean").sort_values()[:50]
+    )
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--data-dir", type=str, default="tools")
     parser.add_argument("-e", "--eval", action="store_true")
+    parser.add_argument("-l", "--list-solver", action="store_true")
     parser.add_argument("-n", "--case_num", type=int, default=100)
     parser.add_argument(
         "-s", "--solver-path", type=str, default="./target/release/ahc027"
@@ -202,7 +210,9 @@ if __name__ == "__main__":
     parser.add_argument("--database-csv", type=str, default="log/database.csv")
     args = parser.parse_args()
 
-    if args.eval:
+    if args.list_solver:
+        list_solvers(args.database_csv)
+    elif args.eval:
         evaluate_relative_score(
             solver_version=args.solver_version,
             benchmark_solver_version=args.benchmark_solver_version,
