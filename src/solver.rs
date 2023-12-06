@@ -31,14 +31,9 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
     let ideal_cycle_l = (1.1 / r[s.0][s.1]).round() as usize;
     let mut cycles = vec![];
     let mut counts = vec![vec![0; input.n]; input.n];
+    let pre_p = -(input.n.pow(2) as f64 / TOTAL_LENGTH as f64);
     let mut ps: Vec<Vec<BTreeSet<FloatIndex>>> =
-        vec![
-            vec![
-                BTreeSet::from([FloatIndex(-(input.n.pow(2) as f64 / TOTAL_LENGTH as f64))]);
-                input.n
-            ];
-            input.n
-        ];
+        vec![vec![BTreeSet::from([FloatIndex(pre_p)]); input.n]; input.n];
 
     // サイクルの作成
     while total_length < TOTAL_LENGTH as i64 {
@@ -109,7 +104,7 @@ fn create_single_cycle(
     input: &Input,
     adj: &Adj,
 ) -> Vec<(usize, usize)> {
-    let (order, _) = solve_tsp(&v, dist, TSP_ITER_CNT);
+    let (order, dist_sum) = solve_tsp(&v, dist, TSP_ITER_CNT);
     let p = order.iter().position(|x| x == &0).unwrap();
     let order: Vec<(usize, usize)> = order.iter().map(|&i| v[(i + p) % v.len()]).collect();
     let mut cycle = vec![];
@@ -129,7 +124,9 @@ fn create_single_cycle(
             if ps[v.0][v.1].len() == 1 && ps[v.0][v.1].iter().next().unwrap() < &FloatIndex(0.) {
                 ps[v.0][v.1].clear();
             }
-            ps[v.0][v.1].insert(FloatIndex(start_t + i as f64 / TOTAL_LENGTH as f64));
+            ps[v.0][v.1].insert(FloatIndex(
+                start_t + (end_t - start_t) * i as f64 / dist_sum as f64,
+            ));
         }
         cycle.extend(path);
     }
