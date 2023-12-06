@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use proconio::input;
 
 pub const TIME_LIMIT: f64 = 1.9;
@@ -46,6 +48,7 @@ pub enum Dir {
     Left,
 }
 
+#[allow(unused)]
 impl Dir {
     pub fn to_char(&self) -> char {
         match self {

@@ -25,12 +25,11 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
         }
     }
 
-    // show(&counts, &required_counts, input);
-
     let s = s;
     let mut total_length = 0;
     let ideal_cycle_l = (1. / r[s.0][s.1]).round() as usize;
     let mut cycles = vec![];
+    let mut counts = vec![vec![0; input.n]; input.n];
     let mut prev = vec![vec![-(input.n as i64).pow(2); input.n]; input.n];
 
     // サイクルの作成
@@ -46,7 +45,32 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
         );
         total_length += cycle.len() as i64;
         eprint!("{} ", cycle.len());
+        for v in cycle.iter() {
+            counts[v.0][v.1] += 1;
+        }
         cycles.push(cycle);
+    }
+
+    // 回収されなかったところを全て回収するサイクルを作る
+    let mut unvisited = vec![];
+    for i in 0..input.n {
+        for j in 0..input.n {
+            if counts[i][j] == 0 {
+                unvisited.push((i, j));
+            }
+        }
+    }
+    if unvisited.len() > 0 {
+        eprintln!("unvisited counts:    {}", unvisited.len());
+        unvisited.insert(0, s);
+        cycles.push(create_single_cycle(
+            &unvisited,
+            total_length,
+            &dist,
+            &mut prev,
+            input,
+            &adj,
+        ));
     }
 
     show(&cycles, input);
@@ -57,7 +81,6 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
     eprintln!("cycle_cnt:       {cycle_cnt}");
     eprintln!("total_length:    {}", total_length);
 
-    // rnd::shuffle(&mut cycles);
     // let use_cycles = optimize_cycles(cycle_cnt, ideal_cycle_l, &cycles, input);
     let use_cycles: Vec<usize> = (0..cycle_cnt).collect();
     let cycles = use_cycles.iter().map(|&i| cycles[i].clone()).collect();
@@ -70,7 +93,6 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
 fn create_single_cycle(
     v: &Vec<(usize, usize)>,
     t: i64,
-    ideal_cycle_l: usize,
     dist: &Vec<Vec<Vec<Vec<i64>>>>,
     prev: &mut Vec<Vec<i64>>,
     input: &Input,
@@ -125,7 +147,7 @@ fn create_cycle(
         selected_v.push(gain_cand[i].1);
     }
 
-    create_single_cycle(&selected_v, t, ideal_cycle_l, dist, prev, input, adj)
+    create_single_cycle(&selected_v, t, dist, prev, input, adj)
 }
 
 fn find_best_path(
@@ -151,7 +173,12 @@ fn find_best_path(
             if !is_closer {
                 continue;
             }
-            let new_val = dp[v.0][v.1] + calc_gain(t, prev[u.0][u.1], input.d[u.0][u.1]);
+            let gain = calc_gain(
+                t + dist[from.0][from.1][u.0][u.1],
+                prev[u.0][u.1],
+                input.d[u.0][u.1],
+            );
+            let new_val = dp[v.0][v.1] + gain;
             if new_val > dp[u.0][u.1] {
                 dp[u.0][u.1] = new_val;
                 q.push_back((*u, dp[u.0][u.1]));
@@ -163,7 +190,11 @@ fn find_best_path(
     let mut path = vec![];
     let mut cur = to;
     while cur != from {
-        let gain = calc_gain(t, prev[cur.0][cur.1], input.d[cur.0][cur.1]);
+        let gain = calc_gain(
+            t + dist[from.0][from.1][cur.0][cur.1],
+            prev[cur.0][cur.1],
+            input.d[cur.0][cur.1],
+        );
         let (_, nxt) = adj[cur.0][cur.1]
             .iter()
             .filter(|(_, u)| dist[from.0][from.1][u.0][u.1] < dist[from.0][from.1][cur.0][cur.1])

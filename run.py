@@ -122,6 +122,8 @@ def evaluate_absolute_score(
 ) -> None:
     logger.info(f"Evaluate {solver_version}")
     database_df = pd.read_csv(database_csv)
+    input_df = pd.read_csv("./tools/input.csv")
+    database_df = pd.merge(database_df, input_df, how="left", on="input_file")
     score_df = database_df[database_df.solver_version == solver_version].reset_index(
         drop=True
     )
@@ -153,6 +155,8 @@ def evaluate_relative_score(
 ) -> None:
     logger.info(f"Comparing {solver_version} -> {benchmark_solver_version}")
     database_df = pd.read_csv(database_csv)
+    input_df = pd.read_csv("./tools/input.csv")
+    database_df = pd.merge(database_df, input_df, how="left", on="input_file")
     score_df = database_df[database_df.solver_version == solver_version].reset_index(
         drop=True
     )
@@ -186,6 +190,8 @@ def evaluate_relative_score(
 
 def list_solvers(database_csv: str) -> None:
     database_df = pd.read_csv(database_csv)
+    input_df = pd.read_csv("./tools/input.csv")
+    database_df = pd.merge(database_df, input_df, how="left", on="input_file")
     logger.info(
         database_df.groupby("solver_version")["score"].agg("mean").sort_values()[:50]
     )
