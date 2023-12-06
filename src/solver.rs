@@ -32,14 +32,20 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
     let mut cycles = vec![];
     let mut counts = vec![vec![0; input.n]; input.n];
     let mut ps: Vec<Vec<BTreeSet<FloatIndex>>> =
-        vec![vec![BTreeSet::from([FloatIndex(-(input.n.pow(2) as f64))]); input.n]; input.n];
+        vec![
+            vec![
+                BTreeSet::from([FloatIndex(-(input.n.pow(2) as f64 / TOTAL_LENGTH as f64))]);
+                input.n
+            ];
+            input.n
+        ];
 
     // サイクルの作成
     while total_length < TOTAL_LENGTH as i64 {
         let cycle = create_cycle(
             s,
-            total_length as f64,
-            (total_length + ideal_cycle_l as i64) as f64,
+            total_length as f64 / TOTAL_LENGTH as f64,
+            (total_length + ideal_cycle_l as i64) as f64 / TOTAL_LENGTH as f64,
             &dist,
             &mut ps,
             input,
@@ -52,6 +58,7 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
         }
         cycles.push(cycle);
     }
+    eprintln!();
 
     // 回収されなかったところを全て回収するサイクルを作る
     let mut unvisited = vec![];
@@ -67,8 +74,8 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
         unvisited.insert(0, s);
         cycles.push(create_single_cycle(
             &unvisited,
-            total_length as f64,
-            (total_length + ideal_cycle_l as i64) as f64,
+            total_length as f64 / TOTAL_LENGTH as f64,
+            (total_length + ideal_cycle_l as i64) as f64 / TOTAL_LENGTH as f64,
             &dist,
             &mut ps,
             input,
@@ -122,7 +129,7 @@ fn create_single_cycle(
             if ps[v.0][v.1].len() == 1 && ps[v.0][v.1].iter().next().unwrap() < &FloatIndex(0.) {
                 ps[v.0][v.1].clear();
             }
-            ps[v.0][v.1].insert(FloatIndex(start_t + i as f64));
+            ps[v.0][v.1].insert(FloatIndex(start_t + i as f64 / TOTAL_LENGTH as f64));
         }
         cycle.extend(path);
     }
@@ -434,8 +441,8 @@ fn solve_tsp(
 }
 
 fn get_prev_and_next(x: FloatIndex, btree: &BTreeSet<FloatIndex>) -> (f64, f64) {
-    let first = btree.iter().next().unwrap().0 + 2. * TOTAL_LENGTH as f64;
-    let last = btree.iter().next_back().unwrap().0 - 2. * TOTAL_LENGTH as f64;
+    let first = btree.iter().next().unwrap().0 + 2.;
+    let last = btree.iter().next_back().unwrap().0 - 2.;
     let prev = btree
         .range((std::ops::Bound::Unbounded, std::ops::Bound::Excluded(x)))
         .next_back()
@@ -450,9 +457,8 @@ fn get_prev_and_next(x: FloatIndex, btree: &BTreeSet<FloatIndex>) -> (f64, f64) 
 }
 
 fn calc_prev_delta(x: FloatIndex, btree: &BTreeSet<FloatIndex>) -> f64 {
-    // xをbtreeに追加した時のスコアの差分
     let (prev, _) = get_prev_and_next(x, btree);
-    assert!(prev <= x.0);
+    assert!(prev <= x.0 && x.0 < 2.);
     ((x.0 - prev) as f64).powf(2.)
 }
 
