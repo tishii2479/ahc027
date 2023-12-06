@@ -6,6 +6,7 @@ use crate::util::*;
 
 type Adj = Vec<Vec<Vec<(Dir, (usize, usize))>>>;
 
+const TSP_ITER_CNT: usize = 100000;
 const TOTAL_LENGTH: usize = 1e4 as usize;
 const INF: i64 = 1e17 as i64;
 
@@ -14,7 +15,6 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
     let adj = create_adj(input);
     let mut dist = vec![vec![vec![]; input.n]; input.n];
     let mut s = (0, 0);
-    let mut prev = vec![vec![-(TOTAL_LENGTH as i64) / 2; input.n]; input.n];
 
     for i in 0..input.n {
         for j in 0..input.n {
@@ -28,19 +28,34 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
     // show(&counts, &required_counts, input);
 
     let s = s;
-    let mut t = 0;
+    let mut total_length = 0;
     let ideal_cycle_l = (1. / r[s.0][s.1]).round() as usize;
-    let cycle_cnt = TOTAL_LENGTH / ideal_cycle_l;
     let mut cycles = vec![];
+    let mut prev = vec![vec![-(input.n as i64).pow(2); input.n]; input.n];
 
     // サイクルの作成
-    for _ in 0..cycle_cnt {
-        let cycle = create_cycle(s, t, ideal_cycle_l, &dist, &mut prev, input, &adj);
-        t += cycle.len() as i64;
+    while total_length < TOTAL_LENGTH as i64 {
+        let cycle = create_cycle(
+            s,
+            total_length,
+            ideal_cycle_l,
+            &dist,
+            &mut prev,
+            input,
+            &adj,
+        );
+        total_length += cycle.len() as i64;
+        eprint!("{} ", cycle.len());
         cycles.push(cycle);
     }
 
-    // show(&counts, &required_counts, input);
+    show(&cycles, input);
+    let cycle_cnt = cycles.len();
+
+    eprintln!("s:               {:?}", s);
+    eprintln!("ideal_cycle_l:   {ideal_cycle_l}");
+    eprintln!("cycle_cnt:       {cycle_cnt}");
+    eprintln!("total_length:    {}", total_length);
 
     // rnd::shuffle(&mut cycles);
     // let use_cycles = optimize_cycles(cycle_cnt, ideal_cycle_l, &cycles, input);
@@ -49,16 +64,11 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
 
     let path = cycles_to_path(&cycles);
 
-    eprintln!("s:               {:?}", s);
-    eprintln!("ideal_cycle_l:   {ideal_cycle_l}");
-    eprintln!("cycle_cnt:       {cycle_cnt}");
-    eprintln!("total_length:    {}", path.len());
-
     path
 }
 
-fn create_cycle(
-    s: (usize, usize),
+fn create_single_cycle(
+    v: &Vec<(usize, usize)>,
     t: i64,
     ideal_cycle_l: usize,
     dist: &Vec<Vec<Vec<Vec<i64>>>>,
@@ -66,29 +76,9 @@ fn create_cycle(
     input: &Input,
     adj: &Adj,
 ) -> Vec<(usize, usize)> {
-    const TSP_ITER_CNT: usize = 100000;
-    let mut gain_cand = vec![];
-    for i in 0..input.n {
-        for j in 0..input.n {
-            gain_cand.push((
-                calc_gain(t + ideal_cycle_l as i64 / 2, prev[i][j], input.d[i][j]),
-                (i, j),
-            ));
-        }
-    }
-    gain_cand.sort_by(|a, b| b.partial_cmp(a).unwrap());
-
-    let mut selected_v = vec![s];
-    let gain_size: usize = input.n * input.n / 12;
-    for i in 0..gain_size {
-        selected_v.push(gain_cand[i].1);
-    }
-    let (order, _) = solve_tsp(&selected_v, dist, TSP_ITER_CNT);
+    let (order, _) = solve_tsp(&v, dist, TSP_ITER_CNT);
     let p = order.iter().position(|x| x == &0).unwrap();
-    let order: Vec<(usize, usize)> = order
-        .iter()
-        .map(|&i| selected_v[(i + p) % selected_v.len()])
-        .collect();
+    let order: Vec<(usize, usize)> = order.iter().map(|&i| v[(i + p) % v.len()]).collect();
     let mut cycle = vec![];
     for i in 0..order.len() {
         let path = find_best_path(
@@ -106,10 +96,36 @@ fn create_cycle(
         }
         cycle.extend(path);
     }
-
-    // show_path(&cycle, input.n);
-    // eprintln!("{}", cycle.len());
     cycle
+}
+
+fn create_cycle(
+    s: (usize, usize),
+    t: i64,
+    ideal_cycle_l: usize,
+    dist: &Vec<Vec<Vec<Vec<i64>>>>,
+    prev: &mut Vec<Vec<i64>>,
+    input: &Input,
+    adj: &Adj,
+) -> Vec<(usize, usize)> {
+    let gain_size: usize = input.n * input.n / 12;
+    let mut gain_cand = vec![];
+    for i in 0..input.n {
+        for j in 0..input.n {
+            gain_cand.push((
+                calc_gain(t + ideal_cycle_l as i64 / 2, prev[i][j], input.d[i][j]),
+                (i, j),
+            ));
+        }
+    }
+    gain_cand.sort_by(|a, b| b.partial_cmp(a).unwrap());
+
+    let mut selected_v = vec![s];
+    for i in 0..gain_size {
+        selected_v.push(gain_cand[i].1);
+    }
+
+    create_single_cycle(&selected_v, t, ideal_cycle_l, dist, prev, input, adj)
 }
 
 fn find_best_path(
@@ -439,26 +455,26 @@ fn calc_gain(t: i64, prev: i64, d: i64) -> i64 {
 }
 
 #[allow(unused)]
-fn show(counts: &Vec<Vec<i64>>, required_counts: &Vec<Vec<i64>>, input: &Input) {
+fn show(cycles: &Vec<Vec<(usize, usize)>>, input: &Input) {
     eprintln!("-----");
     let mut lower_bound = 0.;
     let mut sum = 0;
     let mut max = 0;
+    let mut counts = vec![vec![0; input.n]; input.n];
+    for cycle in cycles.iter() {
+        for v in cycle.iter() {
+            counts[v.0][v.1] += 1;
+        }
+    }
+
     for i in 0..counts.len() {
         for j in 0..counts[i].len() {
             lower_bound += input.d[i][j] as f64
                 * (TOTAL_LENGTH as f64 / (counts[i][j] as f64 + 1e-6)).powf(2.);
-            eprint!("{:4}", required_counts[i][j] - counts[i][j]);
-            if required_counts[i][j] - counts[i][j] > 0 {
-                max = max.max(required_counts[i][j] - counts[i][j]);
-                sum += required_counts[i][j] - counts[i][j];
-            }
+            eprint!("{:4}", counts[i][j]);
         }
         eprintln!();
     }
-    eprintln!("lower:   {:.5}", lower_bound / TOTAL_LENGTH as f64);
-    eprintln!("max:     {max}");
-    eprintln!("ave:     {:.5}", sum as f64 / counts.len().pow(2) as f64);
 }
 
 #[allow(unused)]
