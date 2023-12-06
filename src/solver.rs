@@ -229,6 +229,44 @@ fn optimize_cycles(
         FloatIndex((t * ideal_cycle_l) as f64 + ideal_cycle_l as f64 * i as f64 / cycle_l as f64)
     }
 
+    fn remove_cycle(
+        c_i: usize,
+        cycle_status: &mut Vec<usize>,
+        cycles: &Vec<Vec<(usize, usize)>>,
+        ps: &mut Vec<Vec<BTreeSet<FloatIndex>>>,
+        total_cycle_length: i64,
+        ideal_cycle_l: usize,
+    ) -> f64 {
+        let mut score_delta = 0.;
+        let t = cycle_status[c_i];
+        assert_ne!(t, UNUSED);
+        for (i, v) in cycles[c_i].iter().enumerate() {
+            let index = to_float_index(t, i, cycles[c_i].len(), ideal_cycle_l);
+            score_delta -= calc_delta(index, &ps[v.0][v.1], total_cycle_length, true);
+            ps[v.0][v.1].remove(&index);
+        }
+        score_delta
+    }
+
+    fn insert_cycle(
+        c_i: usize,
+        cycle_status: &mut Vec<usize>,
+        cycles: &Vec<Vec<(usize, usize)>>,
+        ps: &mut Vec<Vec<BTreeSet<FloatIndex>>>,
+        total_cycle_length: i64,
+        ideal_cycle_l: usize,
+    ) -> f64 {
+        let mut score_delta = 0.;
+        let t = cycle_status[c_i];
+        assert_ne!(t, UNUSED);
+        for (i, v) in cycles[c_i].iter().enumerate() {
+            let index = to_float_index(t, i, cycles[c_i].len(), ideal_cycle_l);
+            ps[v.0][v.1].insert(index);
+            score_delta += calc_delta(index, &ps[v.0][v.1], total_cycle_length, true);
+        }
+        score_delta
+    }
+
     fn action_swap(
         c_a: usize,
         c_b: usize,
@@ -244,12 +282,14 @@ fn optimize_cycles(
             if cycle_status[c_i] == UNUSED {
                 continue;
             }
-            let t = cycle_status[c_i];
-            for (i, v) in cycles[c_i].iter().enumerate() {
-                let index = to_float_index(t, i, cycles[c_i].len(), ideal_cycle_l);
-                score_delta -= calc_delta(index, &ps[v.0][v.1], total_cycle_length, true);
-                ps[v.0][v.1].remove(&index);
-            }
+            remove_cycle(
+                c_i,
+                cycle_status,
+                cycles,
+                ps,
+                total_cycle_length,
+                ideal_cycle_l,
+            );
         }
         cycle_status.swap(c_a, c_b);
 
@@ -258,14 +298,71 @@ fn optimize_cycles(
             if cycle_status[c_i] == UNUSED {
                 continue;
             }
-            let t = cycle_status[c_i];
-            for (i, v) in cycles[c_i].iter().enumerate() {
-                let index = to_float_index(t, i, cycles[c_i].len(), ideal_cycle_l);
-                ps[v.0][v.1].insert(index);
-                score_delta += calc_delta(index, &ps[v.0][v.1], total_cycle_length, true);
-            }
+            insert_cycle(
+                c_i,
+                cycle_status,
+                cycles,
+                ps,
+                total_cycle_length,
+                ideal_cycle_l,
+            );
         }
 
+        score_delta
+    }
+
+    fn action_new_cycle(
+        c_i: usize,
+        t: i64,
+        s: (usize, usize),
+        cycle_status: &mut Vec<usize>,
+        cycles: &mut Vec<Vec<(usize, usize)>>,
+        ps: &mut Vec<Vec<BTreeSet<FloatIndex>>>,
+        dist: &Vec<Vec<Vec<Vec<i64>>>>,
+        prev: &Vec<Vec<i64>>,
+        total_cycle_length: i64,
+        ideal_cycle_l: usize,
+        input: &Input,
+        adj: &Adj,
+    ) -> f64 {
+        let gain_size: usize = input.n * input.n / 12;
+        let mut score_delta = 0.;
+        // score_delta += remove_cycle(
+        //     c_i,
+        //     cycle_status,
+        //     cycles,
+        //     ps,
+        //     total_cycle_length,
+        //     ideal_cycle_l,
+        // );
+
+        // let mut gain_cand = vec![];
+        // for i in 0..input.n {
+        //     for j in 0..input.n {
+        //         gain_cand.push((
+        //             calc_gain(t + ideal_cycle_l as i64 / 2, prev[i][j], input.d[i][j]),
+        //             (i, j),
+        //         ));
+        //     }
+        // }
+        // gain_cand.sort_by(|a, b| b.cmp(a));
+        // let mut v = vec![s];
+        // for i in 0..gain_size {
+        //     v.push(gain_cand[i].1);
+        // }
+
+        // // let cycle = create_single_cycle(&v, t, dist, prev, input, adj);
+        // let new_c_i = cycles.len();
+        // cycles.push(cycle);
+        // cycle_status[new_c_i] = c_i;
+        // score_delta += insert_cycle(
+        //     new_c_i,
+        //     cycle_status,
+        //     cycles,
+        //     ps,
+        //     total_cycle_length,
+        //     ideal_cycle_l,
+        // );
         score_delta
     }
 
