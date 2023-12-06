@@ -235,12 +235,12 @@ if __name__ == "__main__":
             f"python3 expander.py > log/backup/{args.solver_version}.rs", shell=True
         )
         run(
-            args.data_dir,
-            args.solver_path,
-            args.solver_version,
-            args.case_num,
-            args.database_csv,
-            args.ignore,
+            data_dir=args.data_dir,
+            solver_path=args.solver_path,
+            solver_version=args.solver_version,
+            case_num=args.case_num,
+            database_csv=args.database_csv,
+            ignore=args.ignore,
         )
         evaluate_relative_score(
             solver_version=args.solver_version,
