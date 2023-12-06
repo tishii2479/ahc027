@@ -9,6 +9,7 @@ type Adj = Vec<Vec<Vec<(Dir, (usize, usize))>>>;
 const TSP_ITER_CNT: usize = 100000;
 const TOTAL_LENGTH: usize = 1e4 as usize;
 const INF: i64 = 1e17 as i64;
+const UNUSED: usize = usize::MAX;
 
 pub fn solve(input: &Input) -> Vec<(usize, usize)> {
     let r = calc_r(input);
@@ -212,217 +213,166 @@ fn find_best_path(
     path
 }
 
-fn optimize_cycles(
-    cycle_cnt: usize,
-    ideal_cycle_l: usize,
-    cycles: &Vec<Vec<(usize, usize)>>,
-    input: &Input,
-) -> Vec<usize> {
-    const UNUSED: usize = usize::MAX;
-    let total_cycle_length = (cycle_cnt * ideal_cycle_l) as i64;
-    let mut cycle_status: Vec<usize> = (0..cycle_cnt).collect();
-    cycle_status.extend(vec![UNUSED; cycles.len()]);
+fn to_float_index(t: usize, i: usize, cycle_l: usize) -> FloatIndex {
+    FloatIndex(t as f64 + i as f64 / cycle_l as f64)
+}
 
-    let mut ps: Vec<Vec<BTreeSet<FloatIndex>>> = vec![vec![BTreeSet::new(); input.n]; input.n];
+struct State {
+    score: f64,
+    total_cycle_length: i64,
+    cycles: Vec<Vec<(usize, usize)>>,
+    cycle_usage: Vec<usize>,
+    ps: Vec<Vec<BTreeSet<FloatIndex>>>,
+}
 
-    fn to_float_index(t: usize, i: usize, cycle_l: usize, ideal_cycle_l: usize) -> FloatIndex {
-        FloatIndex((t * ideal_cycle_l) as f64 + ideal_cycle_l as f64 * i as f64 / cycle_l as f64)
+impl State {
+    fn new(cycles: Vec<Vec<(usize, usize)>>, total_cycle_length: i64, input: &Input) -> State {
+        let cycle_cnt = cycles.len();
+        let cycle_usage = (0..cycle_cnt).collect();
+        let mut ps: Vec<Vec<BTreeSet<FloatIndex>>> = vec![vec![BTreeSet::new(); input.n]; input.n];
+
+        for c_i in 0..cycle_cnt {
+            for (i, v) in cycles[c_i].iter().enumerate() {
+                ps[v.0][v.1].insert(to_float_index(c_i, i, cycles[c_i].len()));
+            }
+        }
+
+        let mut score = 0.;
+        for i in 0..input.n {
+            for j in 0..input.n {
+                for x in ps[i][j].iter() {
+                    let (prev, next) = get_prev_and_next(*x, &ps[i][j], total_cycle_length);
+                    score += ((prev - x.0).powf(2.) + (next - x.0).powf(2.)) / 2.;
+                    score += calc_delta(*x, &ps[i][j], total_cycle_length);
+                }
+            }
+        }
+
+        State {
+            score,
+            total_cycle_length,
+            cycles,
+            cycle_usage,
+            ps,
+        }
     }
 
-    fn remove_cycle(
-        c_i: usize,
-        cycle_status: &mut Vec<usize>,
-        cycles: &Vec<Vec<(usize, usize)>>,
-        ps: &mut Vec<Vec<BTreeSet<FloatIndex>>>,
-        total_cycle_length: i64,
-        ideal_cycle_l: usize,
-    ) -> f64 {
+    fn remove_cycle(&mut self, c_i: usize) -> f64 {
         let mut score_delta = 0.;
-        let t = cycle_status[c_i];
+        let t = self.cycle_usage[c_i];
         assert_ne!(t, UNUSED);
-        for (i, v) in cycles[c_i].iter().enumerate() {
-            let index = to_float_index(t, i, cycles[c_i].len(), ideal_cycle_l);
-            score_delta -= calc_delta(index, &ps[v.0][v.1], total_cycle_length, true);
-            ps[v.0][v.1].remove(&index);
+        for (i, v) in self.cycles[c_i].iter().enumerate() {
+            let index = to_float_index(t, i, self.cycles[c_i].len());
+            score_delta -= calc_delta(index, &self.ps[v.0][v.1], self.total_cycle_length);
+            self.ps[v.0][v.1].remove(&index);
         }
         score_delta
     }
 
-    fn insert_cycle(
-        c_i: usize,
-        cycle_status: &mut Vec<usize>,
-        cycles: &Vec<Vec<(usize, usize)>>,
-        ps: &mut Vec<Vec<BTreeSet<FloatIndex>>>,
-        total_cycle_length: i64,
-        ideal_cycle_l: usize,
-    ) -> f64 {
+    fn insert_cycle(&mut self, c_i: usize) -> f64 {
         let mut score_delta = 0.;
-        let t = cycle_status[c_i];
+        let t = self.cycle_usage[c_i];
         assert_ne!(t, UNUSED);
-        for (i, v) in cycles[c_i].iter().enumerate() {
-            let index = to_float_index(t, i, cycles[c_i].len(), ideal_cycle_l);
-            ps[v.0][v.1].insert(index);
-            score_delta += calc_delta(index, &ps[v.0][v.1], total_cycle_length, true);
+        for (i, v) in self.cycles[c_i].iter().enumerate() {
+            let index = to_float_index(t, i, self.cycles[c_i].len());
+            self.ps[v.0][v.1].insert(index);
+            score_delta += calc_delta(index, &self.ps[v.0][v.1], self.total_cycle_length);
         }
         score_delta
     }
 
-    fn action_swap(
-        c_a: usize,
-        c_b: usize,
-        cycle_status: &mut Vec<usize>,
-        cycles: &Vec<Vec<(usize, usize)>>,
-        ps: &mut Vec<Vec<BTreeSet<FloatIndex>>>,
-        total_cycle_length: i64,
-        ideal_cycle_l: usize,
-    ) -> f64 {
+    fn action_swap(&mut self, c_a: usize, c_b: usize) -> f64 {
         let mut score_delta = 0.;
         // 取り除く
         for c_i in [c_a, c_b] {
-            if cycle_status[c_i] == UNUSED {
+            if self.cycle_usage[c_i] == UNUSED {
                 continue;
             }
-            remove_cycle(
-                c_i,
-                cycle_status,
-                cycles,
-                ps,
-                total_cycle_length,
-                ideal_cycle_l,
-            );
+            score_delta += self.remove_cycle(c_i);
         }
-        cycle_status.swap(c_a, c_b);
+        self.cycle_usage.swap(c_a, c_b);
 
         // 追加する
         for c_i in [c_a, c_b] {
-            if cycle_status[c_i] == UNUSED {
+            if self.cycle_usage[c_i] == UNUSED {
                 continue;
             }
-            insert_cycle(
-                c_i,
-                cycle_status,
-                cycles,
-                ps,
-                total_cycle_length,
-                ideal_cycle_l,
-            );
+            score_delta += self.insert_cycle(c_i);
         }
 
         score_delta
     }
 
-    fn action_new_cycle(
-        c_i: usize,
-        t: i64,
-        s: (usize, usize),
-        cycle_status: &mut Vec<usize>,
-        cycles: &mut Vec<Vec<(usize, usize)>>,
-        ps: &mut Vec<Vec<BTreeSet<FloatIndex>>>,
-        dist: &Vec<Vec<Vec<Vec<i64>>>>,
-        prev: &Vec<Vec<i64>>,
-        total_cycle_length: i64,
-        ideal_cycle_l: usize,
-        input: &Input,
-        adj: &Adj,
-    ) -> f64 {
-        let gain_size: usize = input.n * input.n / 12;
-        let mut score_delta = 0.;
-        // score_delta += remove_cycle(
-        //     c_i,
-        //     cycle_status,
-        //     cycles,
-        //     ps,
-        //     total_cycle_length,
-        //     ideal_cycle_l,
-        // );
+    // fn action_new_cycle(
+    //     &mut self,
+    //     c_i: usize,
+    //     s: (usize, usize),
+    //     dist: &Vec<Vec<Vec<Vec<i64>>>>,
+    //     input: &Input,
+    //     adj: &Adj,
+    // ) -> f64 {
+    //     unimplemented!()
+    //     let gain_size: usize = input.n * input.n / 12;
+    //     let mut score_delta = 0.;
+    //     score_delta += self.remove_cycle(c_i);
 
-        // let mut gain_cand = vec![];
-        // for i in 0..input.n {
-        //     for j in 0..input.n {
-        //         gain_cand.push((
-        //             calc_gain(t + ideal_cycle_l as i64 / 2, prev[i][j], input.d[i][j]),
-        //             (i, j),
-        //         ));
-        //     }
-        // }
-        // gain_cand.sort_by(|a, b| b.cmp(a));
-        // let mut v = vec![s];
-        // for i in 0..gain_size {
-        //     v.push(gain_cand[i].1);
-        // }
+    //     let mut gain_cand = vec![];
+    //     let t = 0;
+    //     for i in 0..input.n {
+    //         for j in 0..input.n {
+    //             gain_cand.push((calc_gain(t + 0.5, prev[i][j], input.d[i][j]), (i, j)));
+    //         }
+    //     }
+    //     gain_cand.sort_by(|a, b| b.cmp(a));
+    //     let mut v = vec![s];
+    //     for i in 0..gain_size {
+    //         v.push(gain_cand[i].1);
+    //     }
 
-        // // let cycle = create_single_cycle(&v, t, dist, prev, input, adj);
-        // let new_c_i = cycles.len();
-        // cycles.push(cycle);
-        // cycle_status[new_c_i] = c_i;
-        // score_delta += insert_cycle(
-        //     new_c_i,
-        //     cycle_status,
-        //     cycles,
-        //     ps,
-        //     total_cycle_length,
-        //     ideal_cycle_l,
-        // );
-        score_delta
-    }
+    //     let cycle = create_single_cycle(&v, t, dist, prev, input, adj);
+    //     let new_c_i = self.cycles.len();
+    //     self.cycles.push(cycle);
+    //     self.cycle_usage[new_c_i] = c_i;
+    //     score_delta += self.insert_cycle(new_c_i);
+    //     score_delta
+    // }
+}
 
-    for c_i in 0..cycle_cnt {
-        for (i, v) in cycles[c_i].iter().enumerate() {
-            ps[v.0][v.1].insert(to_float_index(c_i, i, cycles[c_i].len(), ideal_cycle_l));
-        }
-    }
-
-    let mut score = 0.;
-    for i in 0..input.n {
-        for j in 0..input.n {
-            for x in ps[i][j].iter() {
-                score += calc_delta(*x, &ps[i][j], total_cycle_length, false);
-            }
-        }
-    }
+fn optimize_cycles(
+    cycle_cnt: usize,
+    ideal_cycle_l: usize,
+    total_cycle_length: i64,
+    cycles: Vec<Vec<(usize, usize)>>,
+    input: &Input,
+) -> Vec<usize> {
+    let mut state = State::new(cycles, total_cycle_length, input);
 
     let mut iter_count = 0;
     while time::elapsed_seconds() < TIME_LIMIT {
         let (c_a, c_b) = (
-            rnd::gen_range(0, cycles.len()),
-            rnd::gen_range(0, cycles.len()),
+            rnd::gen_range(0, state.cycles.len()),
+            rnd::gen_range(0, state.cycles.len()),
         );
-        if c_a == c_b || (cycle_status[c_a] == UNUSED && cycle_status[c_b] == UNUSED) {
+        if c_a == c_b || (state.cycle_usage[c_a] == UNUSED && state.cycle_usage[c_b] == UNUSED) {
             continue;
         }
         iter_count += 1;
 
-        let prev_score = score;
+        let prev_score = state.score;
 
-        score += action_swap(
-            c_a,
-            c_b,
-            &mut cycle_status,
-            cycles,
-            &mut ps,
-            total_cycle_length,
-            ideal_cycle_l,
-        );
+        state.score += state.action_swap(c_a, c_b);
 
-        if score < prev_score {
+        if state.score < prev_score {
             // eprintln!("adopt: {prev_score} -> {score} {c_a} {c_b}");
         } else {
-            score += action_swap(
-                c_a,
-                c_b,
-                &mut cycle_status,
-                cycles,
-                &mut ps,
-                total_cycle_length,
-                ideal_cycle_l,
-            );
+            state.score += state.action_swap(c_a, c_b);
         }
     }
 
     eprintln!("iter_count: {}", iter_count);
 
     let mut cycle_order = vec![0; cycle_cnt];
-    for (i, status) in cycle_status.iter().enumerate() {
+    for (i, status) in state.cycle_usage.iter().enumerate() {
         if *status == UNUSED {
             continue;
         }
@@ -476,12 +426,11 @@ fn solve_tsp(
     (order, score)
 }
 
-fn calc_delta(
+fn get_prev_and_next(
     x: FloatIndex,
     btree: &BTreeSet<FloatIndex>,
     total_cycle_length: i64,
-    delta: bool,
-) -> f64 {
+) -> (f64, f64) {
     let first = btree.iter().next().unwrap().0 + total_cycle_length as f64;
     let last = btree.iter().next_back().unwrap().0 - total_cycle_length as f64;
     let prev = btree
@@ -494,13 +443,13 @@ fn calc_delta(
         .next()
         .unwrap_or(&FloatIndex(first))
         .0;
-    ((((x.0 - prev) as f64).powf(2.) + ((next - x.0) as f64).powf(2.))
-        - if delta {
-            ((next - prev) as f64).powf(2.)
-        } else {
-            0.
-        })
-        * if delta { 2. } else { 1. }
+    (prev, next)
+}
+
+fn calc_delta(x: FloatIndex, btree: &BTreeSet<FloatIndex>, total_cycle_length: i64) -> f64 {
+    let (prev, next) = get_prev_and_next(x, btree, total_cycle_length);
+    (((x.0 - prev) as f64).powf(2.) + ((next - x.0) as f64).powf(2.))
+        - ((next - prev) as f64).powf(2.)
 }
 
 fn cycles_to_path(cycles: &Vec<Vec<(usize, usize)>>) -> Vec<(usize, usize)> {
@@ -578,8 +527,8 @@ fn calc_dist(s: (usize, usize), input: &Input, adj: &Adj) -> Vec<Vec<i64>> {
     dist
 }
 
-fn calc_gain(t: i64, prev: i64, d: i64) -> i64 {
-    (t - prev).pow(2) * d
+fn calc_gain(t1: i64, t2: i64, d: i64) -> i64 {
+    (t1 - t2).pow(2) * d
 }
 
 #[allow(unused)]
@@ -629,7 +578,8 @@ fn test_calc_delta() {
     fn calc_actual_score(btree: &BTreeSet<FloatIndex>, total_cycle_length: i64) -> f64 {
         let mut score = 0.;
         for x in btree.iter() {
-            score += calc_delta(*x, &btree, total_cycle_length, false);
+            let (prev, next) = get_prev_and_next(*x, btree, total_cycle_length);
+            score += ((x.0 - prev).powf(2.) + (x.0 - next).powf(2.)) / 2.;
         }
         score
     }
@@ -642,10 +592,10 @@ fn test_calc_delta() {
         }
 
         btree.insert(x);
-        score += calc_delta(x, &btree, total_cycle_length as i64, true);
+        score += calc_delta(x, &btree, total_cycle_length as i64);
         assert_eq!(score, calc_actual_score(&btree, total_cycle_length as i64));
 
-        score -= calc_delta(x, &btree, total_cycle_length as i64, true);
+        score -= calc_delta(x, &btree, total_cycle_length as i64);
         btree.remove(&x);
         assert_eq!(prev_score, score);
     }
