@@ -69,63 +69,127 @@ pub fn solve(input: &Input) -> String {
     ans
 }
 
-fn calc_delta(
-    x: FloatIndex,
-    btree: &BTreeSet<FloatIndex>,
-    total_cycle_length: i64,
-    delta: bool,
-) -> f64 {
-    let first = btree.iter().next().unwrap().0 + total_cycle_length as f64;
-    let last = btree.iter().next_back().unwrap().0 - total_cycle_length as f64;
-    let prev = btree
-        .range((std::ops::Bound::Unbounded, std::ops::Bound::Excluded(x)))
-        .next_back()
-        .unwrap_or(&FloatIndex(last))
-        .0;
-    let next = btree
-        .range((std::ops::Bound::Excluded(x), std::ops::Bound::Unbounded))
-        .next()
-        .unwrap_or(&FloatIndex(first))
-        .0;
-    ((((x.0 - prev) as f64).powf(2.) + ((next - x.0) as f64).powf(2.))
-        - if delta {
-            ((next - prev) as f64).powf(2.)
-        } else {
-            0.
-        })
-        * if delta { 2. } else { 1. }
-}
+fn create_cycle(
+    s: (usize, usize),
+    ideal_cycle_l: usize,
+    dist: &Vec<Vec<Vec<Vec<i64>>>>,
+    required_counts: &Vec<Vec<i64>>,
+    counts: &mut Vec<Vec<i64>>,
+    input: &Input,
+    adj: &Adj,
+) -> Vec<(usize, usize)> {
+    const COUNT_SIZE: usize = 20;
+    const GAIN_SIZE: usize = 10;
 
-#[test]
-fn test_calc_delta() {
-    let mut btree = BTreeSet::new();
-    let total_cycle_length = 1000000;
-    for _ in 0..10 {
-        btree.insert(FloatIndex(rnd::gen_range(0, total_cycle_length) as f64));
-    }
-    fn calc_actual_score(btree: &BTreeSet<FloatIndex>, total_cycle_length: i64) -> f64 {
-        let mut score = 0.;
-        for x in btree.iter() {
-            score += calc_delta(*x, &btree, total_cycle_length, false);
+    let mut gain_cand = vec![];
+    let mut count_cand = vec![];
+    for i in 0..input.n {
+        for j in 0..input.n {
+            gain_cand.push((calc_gain(counts[i][j], input.d[i][j]), (i, j)));
+            count_cand.push((required_counts[i][j] - counts[i][j], (i, j)));
         }
-        score
     }
-    let mut score = calc_actual_score(&btree, total_cycle_length as i64);
-    for _ in 0..10000 {
-        let prev_score = score;
-        let x = FloatIndex(rnd::gen_range(0, total_cycle_length) as f64);
-        if btree.contains(&x) {
+    let mut selected_v = vec![s];
+
+    gain_cand.sort_by(|a, b| b.partial_cmp(a).unwrap());
+    for i in 0..GAIN_SIZE {
+        selected_v.push(gain_cand[i].1);
+    }
+    count_cand.sort_by(|a, b| b.cmp(a));
+    for i in 0..COUNT_SIZE {
+        if selected_v.contains(&count_cand[i].1) {
             continue;
         }
-
-        btree.insert(x);
-        score += calc_delta(x, &btree, total_cycle_length as i64, true);
-        assert_eq!(score, calc_actual_score(&btree, total_cycle_length as i64));
-
-        score -= calc_delta(x, &btree, total_cycle_length as i64, true);
-        btree.remove(&x);
-        assert_eq!(prev_score, score);
+        selected_v.push(count_cand[i].1);
     }
+
+    let mut rev_counts = vec![];
+    let (order, _) = solve_tsp(&selected_v, dist);
+    let p = order.iter().position(|x| x == &0).unwrap();
+    let order: Vec<(usize, usize)> = order
+        .iter()
+        .map(|&i| selected_v[(i + p) % selected_v.len()])
+        .collect();
+    let mut cycle = vec![];
+    for i in 0..order.len() {
+        let path = find_best_path(
+            order[i],
+            order[(i + 1) % order.len()],
+            dist,
+            counts,
+            input,
+            adj,
+        );
+
+        for v in path.iter() {
+            if counts[v.0][v.1] == USED_CODE {
+                continue;
+            }
+            rev_counts.push((*v, counts[v.0][v.1] + 1));
+            counts[v.0][v.1] = USED_CODE;
+        }
+        cycle.extend(path);
+    }
+
+    for (v, rev_t) in rev_counts {
+        counts[v.0][v.1] = rev_t;
+    }
+
+    // show_path(&cycle, input.n);
+    // eprintln!("{}", cycle.len());
+    cycle
+}
+
+fn find_best_path(
+    s: (usize, usize),
+    t: (usize, usize),
+    dist: &Vec<Vec<Vec<Vec<i64>>>>,
+    counts: &Vec<Vec<i64>>,
+    input: &Input,
+    adj: &Adj,
+) -> Vec<(usize, usize)> {
+    let mut dp = vec![vec![-INF as f64; input.n]; input.n];
+    let mut q = VecDeque::new();
+    q.push_back((s, 0.));
+    dp[s.0][s.1] = 0.;
+
+    while let Some((v, val)) = q.pop_front() {
+        if dp[v.0][v.1] > val {
+            continue;
+        }
+        for (_, u) in adj[v.0][v.1].iter() {
+            let is_closer = dist[t.0][t.1][u.0][u.1] < dist[t.0][t.1][v.0][v.1];
+            if !is_closer {
+                continue;
+            }
+            let new_val = dp[v.0][v.1] + calc_gain(counts[u.0][u.1], input.d[u.0][u.1]);
+            if new_val > dp[u.0][u.1] {
+                dp[u.0][u.1] = new_val;
+                q.push_back((*u, dp[u.0][u.1]));
+            }
+        }
+    }
+
+    // 復元
+    let mut path = vec![];
+    let mut cur = t;
+    while cur != s {
+        let gain = calc_gain(counts[cur.0][cur.1], input.d[cur.0][cur.1]);
+        let (_, nxt) = adj[cur.0][cur.1]
+            .iter()
+            .filter(|(_, u)| dist[s.0][s.1][u.0][u.1] < dist[s.0][s.1][cur.0][cur.1])
+            .min_by(|(_, v), (_, u)| {
+                (dp[cur.0][cur.1] - dp[v.0][v.1] - gain)
+                    .abs()
+                    .partial_cmp(&(dp[cur.0][cur.1] - dp[u.0][u.1] - gain).abs())
+                    .unwrap()
+            })
+            .unwrap();
+        path.push(cur);
+        cur = *nxt;
+    }
+    path.reverse();
+    path
 }
 
 fn optimize_cycles(
@@ -250,79 +314,8 @@ fn optimize_cycles(
     cycle_order
 }
 
-fn create_cycle(
-    s: (usize, usize),
-    ideal_cycle_l: usize,
-    dist: &Vec<Vec<Vec<Vec<i64>>>>,
-    required_counts: &Vec<Vec<i64>>,
-    counts: &mut Vec<Vec<i64>>,
-    input: &Input,
-    adj: &Adj,
-) -> Vec<(usize, usize)> {
-    const COUNT_SIZE: usize = 20;
-    const GAIN_SIZE: usize = 10;
-
-    let mut gain_cand = vec![];
-    let mut count_cand = vec![];
-    for i in 0..input.n {
-        for j in 0..input.n {
-            gain_cand.push((calc_gain(counts[i][j], input.d[i][j]), (i, j)));
-            count_cand.push((required_counts[i][j] - counts[i][j], (i, j)));
-        }
-    }
-    let mut selected_v = vec![s];
-
-    gain_cand.sort_by(|a, b| b.partial_cmp(a).unwrap());
-    for i in 0..GAIN_SIZE {
-        selected_v.push(gain_cand[i].1);
-    }
-    count_cand.sort_by(|a, b| b.cmp(a));
-    for i in 0..COUNT_SIZE {
-        if selected_v.contains(&count_cand[i].1) {
-            continue;
-        }
-        selected_v.push(count_cand[i].1);
-    }
-
-    let mut rev_counts = vec![];
-    let (order, _) = solve_tsp(&selected_v, dist);
-    let p = order.iter().position(|x| x == &0).unwrap();
-    let order: Vec<(usize, usize)> = order
-        .iter()
-        .map(|&i| selected_v[(i + p) % selected_v.len()])
-        .collect();
-    let mut cycle = vec![];
-    for i in 0..order.len() {
-        let path = find_best_path(
-            order[i],
-            order[(i + 1) % order.len()],
-            dist,
-            counts,
-            input,
-            adj,
-        );
-
-        for v in path.iter() {
-            if counts[v.0][v.1] == USED_CODE {
-                continue;
-            }
-            rev_counts.push((*v, counts[v.0][v.1] + 1));
-            counts[v.0][v.1] = USED_CODE;
-        }
-        cycle.extend(path);
-    }
-
-    for (v, rev_t) in rev_counts {
-        counts[v.0][v.1] = rev_t;
-    }
-
-    // show_path(&cycle, input.n);
-    // eprintln!("{}", cycle.len());
-    cycle
-}
-
 fn solve_tsp(v: &Vec<(usize, usize)>, dist: &Vec<Vec<Vec<Vec<i64>>>>) -> (Vec<usize>, i64) {
-    const LOOP_COUNT: usize = 1000;
+    const LOOP_COUNT: usize = 10000;
     let n = v.len();
     let mut order: Vec<usize> = (0..n).map(|x| x).collect();
     let mut score = 0;
@@ -359,56 +352,31 @@ fn solve_tsp(v: &Vec<(usize, usize)>, dist: &Vec<Vec<Vec<Vec<i64>>>>) -> (Vec<us
     (order, score)
 }
 
-fn find_best_path(
-    s: (usize, usize),
-    t: (usize, usize),
-    dist: &Vec<Vec<Vec<Vec<i64>>>>,
-    counts: &Vec<Vec<i64>>,
-    input: &Input,
-    adj: &Adj,
-) -> Vec<(usize, usize)> {
-    let mut dp = vec![vec![-INF as f64; input.n]; input.n];
-    let mut q = VecDeque::new();
-    q.push_back((s, 0.));
-    dp[s.0][s.1] = 0.;
-
-    while let Some((v, val)) = q.pop_front() {
-        if dp[v.0][v.1] > val {
-            continue;
-        }
-        for (_, u) in adj[v.0][v.1].iter() {
-            let is_closer = dist[t.0][t.1][u.0][u.1] < dist[t.0][t.1][v.0][v.1];
-            if !is_closer {
-                continue;
-            }
-            let new_val = dp[v.0][v.1] + calc_gain(counts[u.0][u.1], input.d[u.0][u.1]);
-            if new_val > dp[u.0][u.1] {
-                dp[u.0][u.1] = new_val;
-                q.push_back((*u, dp[u.0][u.1]));
-            }
-        }
-    }
-
-    // 復元
-    let mut path = vec![];
-    let mut cur = t;
-    while cur != s {
-        let gain = calc_gain(counts[cur.0][cur.1], input.d[cur.0][cur.1]);
-        let (_, nxt) = adj[cur.0][cur.1]
-            .iter()
-            .filter(|(_, u)| dist[s.0][s.1][u.0][u.1] < dist[s.0][s.1][cur.0][cur.1])
-            .min_by(|(_, v), (_, u)| {
-                (dp[cur.0][cur.1] - dp[v.0][v.1] - gain)
-                    .abs()
-                    .partial_cmp(&(dp[cur.0][cur.1] - dp[u.0][u.1] - gain).abs())
-                    .unwrap()
-            })
-            .unwrap();
-        path.push(cur);
-        cur = *nxt;
-    }
-    path.reverse();
-    path
+fn calc_delta(
+    x: FloatIndex,
+    btree: &BTreeSet<FloatIndex>,
+    total_cycle_length: i64,
+    delta: bool,
+) -> f64 {
+    let first = btree.iter().next().unwrap().0 + total_cycle_length as f64;
+    let last = btree.iter().next_back().unwrap().0 - total_cycle_length as f64;
+    let prev = btree
+        .range((std::ops::Bound::Unbounded, std::ops::Bound::Excluded(x)))
+        .next_back()
+        .unwrap_or(&FloatIndex(last))
+        .0;
+    let next = btree
+        .range((std::ops::Bound::Excluded(x), std::ops::Bound::Unbounded))
+        .next()
+        .unwrap_or(&FloatIndex(first))
+        .0;
+    ((((x.0 - prev) as f64).powf(2.) + ((next - x.0) as f64).powf(2.))
+        - if delta {
+            ((next - prev) as f64).powf(2.)
+        } else {
+            0.
+        })
+        * if delta { 2. } else { 1. }
 }
 
 fn cycles_to_answer(cycles: &Vec<Vec<(usize, usize)>>) -> String {
@@ -527,5 +495,37 @@ fn show_path(path: &Vec<(usize, usize)>, n: usize) {
             eprint!("{:2}", a[i][j]);
         }
         eprintln!();
+    }
+}
+
+#[test]
+fn test_calc_delta() {
+    let mut btree = BTreeSet::new();
+    let total_cycle_length = 1000000;
+    for _ in 0..10 {
+        btree.insert(FloatIndex(rnd::gen_range(0, total_cycle_length) as f64));
+    }
+    fn calc_actual_score(btree: &BTreeSet<FloatIndex>, total_cycle_length: i64) -> f64 {
+        let mut score = 0.;
+        for x in btree.iter() {
+            score += calc_delta(*x, &btree, total_cycle_length, false);
+        }
+        score
+    }
+    let mut score = calc_actual_score(&btree, total_cycle_length as i64);
+    for _ in 0..10000 {
+        let prev_score = score;
+        let x = FloatIndex(rnd::gen_range(0, total_cycle_length) as f64);
+        if btree.contains(&x) {
+            continue;
+        }
+
+        btree.insert(x);
+        score += calc_delta(x, &btree, total_cycle_length as i64, true);
+        assert_eq!(score, calc_actual_score(&btree, total_cycle_length as i64));
+
+        score -= calc_delta(x, &btree, total_cycle_length as i64, true);
+        btree.remove(&x);
+        assert_eq!(prev_score, score);
     }
 }
