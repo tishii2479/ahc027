@@ -27,7 +27,7 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
 
     let s = s;
     let mut total_length = 0;
-    let ideal_cycle_l = (1. / r[s.0][s.1]).round() as usize;
+    let ideal_cycle_l = (1.1 / r[s.0][s.1]).round() as usize;
     let mut cycles = vec![];
     let mut counts = vec![vec![0; input.n]; input.n];
     let mut prev = vec![vec![-(input.n as i64).pow(2); input.n]; input.n];

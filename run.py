@@ -87,6 +87,7 @@ def run(
     case_num: int,
     database_csv: str,
     args: str = "",
+    ignore: bool = False,
 ) -> pd.DataFrame:
     solver_cmd = f"{solver_path} {args}"
 
@@ -103,13 +104,16 @@ def run(
         list(map(lambda x: vars(x[0]) | vars(x[1]), zip(results, inputs)))
     )
 
-    try:
-        database_df = pd.read_csv(database_csv)
-        database_df = pd.concat([database_df, df], axis=0, ignore_index=True)
-        database_df.to_csv(database_csv, index=False)
-    except (FileNotFoundError, pd.errors.EmptyDataError):
-        logger.info(f"database_csv: {database_csv} not found, create new database_csv")
-        df.to_csv(database_csv, index=False)
+    if not ignore:
+        try:
+            database_df = pd.read_csv(database_csv)
+            database_df = pd.concat([database_df, df], axis=0, ignore_index=True)
+            database_df.to_csv(database_csv, index=False)
+        except (FileNotFoundError, pd.errors.EmptyDataError):
+            logger.info(
+                f"database_csv: {database_csv} not found, create new database_csv"
+            )
+            df.to_csv(database_csv, index=False)
 
     return df
 
@@ -202,6 +206,7 @@ if __name__ == "__main__":
     parser.add_argument("-d", "--data-dir", type=str, default="tools")
     parser.add_argument("-e", "--eval", action="store_true")
     parser.add_argument("-l", "--list-solver", action="store_true")
+    parser.add_argument("-i", "--ignore", action="store_true")
     parser.add_argument("-n", "--case_num", type=int, default=100)
     parser.add_argument(
         "-s", "--solver-path", type=str, default="./target/release/ahc027"
@@ -235,6 +240,7 @@ if __name__ == "__main__":
             args.solver_version,
             args.case_num,
             args.database_csv,
+            args.ignore,
         )
         evaluate_relative_score(
             solver_version=args.solver_version,
