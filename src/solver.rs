@@ -6,25 +6,21 @@ use crate::util::*;
 
 type Adj = Vec<Vec<Vec<(Dir, (usize, usize))>>>;
 
-const total_length: usize = 1e4 as usize;
+const TOTAL_LENGTH: usize = 1e4 as usize;
 const INF: i64 = 1e17 as i64;
-const EPS: f64 = 1e-6;
-const EDGE_WEIGHT: i64 = 1e9 as i64; // NOTE: USED_CODEより小さくあるべき
-const USED_CODE: i64 = 1e9 as i64;
 
 pub fn solve(input: &Input) -> Vec<(usize, usize)> {
     let r = calc_r(input);
     let adj = create_adj(input);
     let mut dist = vec![vec![vec![]; input.n]; input.n];
     let mut s = (0, 0);
-    let mut counts = vec![vec![0; input.n]; input.n];
     let mut required_counts = vec![vec![0; input.n]; input.n];
     let mut prev = vec![vec![0; input.n]; input.n];
 
     for i in 0..input.n {
         for j in 0..input.n {
             dist[i][j] = calc_dist((i, j), input, &adj);
-            required_counts[i][j] = (total_length as f64 * r[i][j]).round() as i64;
+            required_counts[i][j] = (TOTAL_LENGTH as f64 * r[i][j]).round() as i64;
 
             if r[i][j] > r[s.0][s.1] {
                 (s.0, s.1) = (i, j);
@@ -37,13 +33,12 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
     let s = s;
     let mut t = 0;
     let ideal_cycle_l = (1.2 / r[s.0][s.1]).round() as usize;
-    let cycle_cnt = total_length / ideal_cycle_l;
+    let cycle_cnt = TOTAL_LENGTH / ideal_cycle_l;
     let mut cycles = vec![];
 
     // サイクルの作成
     for _ in 0..cycle_cnt {
-        // let cycle = create_cycle(s, &dist, &required_counts, &mut counts, input, &adj);
-        let cycle = create_cycle2(s, t, ideal_cycle_l, &dist, &mut prev, input, &adj);
+        let cycle = create_cycle(s, t, ideal_cycle_l, &dist, &mut prev, input, &adj);
         t += cycle.len() as i64;
         cycles.push(cycle);
     }
@@ -65,7 +60,7 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
     path
 }
 
-fn create_cycle2(
+fn create_cycle(
     s: (usize, usize),
     t: i64,
     ideal_cycle_l: usize,
@@ -97,7 +92,7 @@ fn create_cycle2(
         .collect();
     let mut cycle = vec![];
     for i in 0..order.len() {
-        let path = find_best_path2(
+        let path = find_best_path(
             order[i],
             order[(i + 1) % order.len()],
             t + cycle.len() as i64,
@@ -118,7 +113,7 @@ fn create_cycle2(
     cycle
 }
 
-fn find_best_path2(
+fn find_best_path(
     from: (usize, usize),
     to: (usize, usize),
     t: i64,
@@ -157,128 +152,6 @@ fn find_best_path2(
         let (_, nxt) = adj[cur.0][cur.1]
             .iter()
             .filter(|(_, u)| dist[from.0][from.1][u.0][u.1] < dist[from.0][from.1][cur.0][cur.1])
-            .min_by(|(_, v), (_, u)| {
-                (dp[cur.0][cur.1] - dp[v.0][v.1] - gain)
-                    .abs()
-                    .partial_cmp(&(dp[cur.0][cur.1] - dp[u.0][u.1] - gain).abs())
-                    .unwrap()
-            })
-            .unwrap();
-        path.push(cur);
-        cur = *nxt;
-    }
-    path.reverse();
-    path
-}
-
-fn create_cycle(
-    s: (usize, usize),
-    dist: &Vec<Vec<Vec<Vec<i64>>>>,
-    required_counts: &Vec<Vec<i64>>,
-    counts: &mut Vec<Vec<i64>>,
-    input: &Input,
-    adj: &Adj,
-) -> Vec<(usize, usize)> {
-    const COUNT_SIZE: usize = 10;
-    const GAIN_SIZE: usize = 50;
-
-    let mut gain_cand = vec![];
-    let mut count_cand = vec![];
-    for i in 0..input.n {
-        for j in 0..input.n {
-            gain_cand.push((calc_gain(counts[i][j], input.d[i][j]), (i, j)));
-            count_cand.push((required_counts[i][j] - counts[i][j], (i, j)));
-        }
-    }
-    let mut selected_v = vec![s];
-
-    gain_cand.sort_by(|a, b| b.partial_cmp(a).unwrap());
-    for i in 0..GAIN_SIZE {
-        selected_v.push(gain_cand[i].1);
-    }
-    count_cand.sort_by(|a, b| b.cmp(a));
-    for i in 0..COUNT_SIZE {
-        if selected_v.contains(&count_cand[i].1) {
-            continue;
-        }
-        selected_v.push(count_cand[i].1);
-    }
-
-    let mut rev_counts = vec![];
-    let (order, _) = solve_tsp(&selected_v, dist);
-    let p = order.iter().position(|x| x == &0).unwrap();
-    let order: Vec<(usize, usize)> = order
-        .iter()
-        .map(|&i| selected_v[(i + p) % selected_v.len()])
-        .collect();
-    let mut cycle = vec![];
-    for i in 0..order.len() {
-        let path = find_best_path(
-            order[i],
-            order[(i + 1) % order.len()],
-            dist,
-            counts,
-            input,
-            adj,
-        );
-
-        for v in path.iter() {
-            if counts[v.0][v.1] == USED_CODE {
-                continue;
-            }
-            rev_counts.push((*v, counts[v.0][v.1] + 1));
-            counts[v.0][v.1] = USED_CODE;
-        }
-        cycle.extend(path);
-    }
-
-    for (v, rev_t) in rev_counts {
-        counts[v.0][v.1] = rev_t;
-    }
-
-    // show_path(&cycle, input.n);
-    // eprintln!("{}", cycle.len());
-    cycle
-}
-
-fn find_best_path(
-    s: (usize, usize),
-    t: (usize, usize),
-    dist: &Vec<Vec<Vec<Vec<i64>>>>,
-    counts: &Vec<Vec<i64>>,
-    input: &Input,
-    adj: &Adj,
-) -> Vec<(usize, usize)> {
-    let mut dp = vec![vec![-INF as f64; input.n]; input.n];
-    let mut q = VecDeque::new();
-    q.push_back((s, 0.));
-    dp[s.0][s.1] = 0.;
-
-    while let Some((v, val)) = q.pop_front() {
-        if dp[v.0][v.1] > val {
-            continue;
-        }
-        for (_, u) in adj[v.0][v.1].iter() {
-            let is_closer = dist[t.0][t.1][u.0][u.1] < dist[t.0][t.1][v.0][v.1];
-            if !is_closer {
-                continue;
-            }
-            let new_val = dp[v.0][v.1] + calc_gain(counts[u.0][u.1], input.d[u.0][u.1]);
-            if new_val > dp[u.0][u.1] {
-                dp[u.0][u.1] = new_val;
-                q.push_back((*u, dp[u.0][u.1]));
-            }
-        }
-    }
-
-    // 復元
-    let mut path = vec![];
-    let mut cur = t;
-    while cur != s {
-        let gain = calc_gain(counts[cur.0][cur.1], input.d[cur.0][cur.1]);
-        let (_, nxt) = adj[cur.0][cur.1]
-            .iter()
-            .filter(|(_, u)| dist[s.0][s.1][u.0][u.1] < dist[s.0][s.1][cur.0][cur.1])
             .min_by(|(_, v), (_, u)| {
                 (dp[cur.0][cur.1] - dp[v.0][v.1] - gain)
                     .abs()
@@ -559,11 +432,6 @@ fn calc_gain2(t: i64, prev: i64, d: i64) -> i64 {
     (t - prev).pow(2) * d
 }
 
-fn calc_gain(count: i64, d: i64) -> f64 {
-    (d as f64 * (1. / (count as f64 + EPS).powf(2.) - 1. / (count as f64 + 1.).powf(2.)))
-        .min(EDGE_WEIGHT as f64 - 1.)
-}
-
 #[allow(unused)]
 fn show(counts: &Vec<Vec<i64>>, required_counts: &Vec<Vec<i64>>, input: &Input) {
     eprintln!("-----");
@@ -573,7 +441,7 @@ fn show(counts: &Vec<Vec<i64>>, required_counts: &Vec<Vec<i64>>, input: &Input) 
     for i in 0..counts.len() {
         for j in 0..counts[i].len() {
             lower_bound += input.d[i][j] as f64
-                * (total_length as f64 / (counts[i][j] as f64 + 1e-6)).powf(2.);
+                * (TOTAL_LENGTH as f64 / (counts[i][j] as f64 + 1e-6)).powf(2.);
             eprint!("{:4}", required_counts[i][j] - counts[i][j]);
             if required_counts[i][j] - counts[i][j] > 0 {
                 max = max.max(required_counts[i][j] - counts[i][j]);
@@ -582,7 +450,7 @@ fn show(counts: &Vec<Vec<i64>>, required_counts: &Vec<Vec<i64>>, input: &Input) 
         }
         eprintln!();
     }
-    eprintln!("lower:   {:.5}", lower_bound / total_length as f64);
+    eprintln!("lower:   {:.5}", lower_bound / TOTAL_LENGTH as f64);
     eprintln!("max:     {max}");
     eprintln!("ave:     {:.5}", sum as f64 / counts.len().pow(2) as f64);
 }
