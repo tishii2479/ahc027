@@ -35,7 +35,7 @@ pub fn solve(input: &Input) -> String {
     show(&counts, &required_counts, input);
 
     let s = s;
-    let ideal_cycle_l = (1. / r[s.0][s.1]).round() as usize;
+    let ideal_cycle_l = (1.2 / r[s.0][s.1]).round() as usize;
     let cycle_cnt = L / ideal_cycle_l;
     let mut cycles = vec![];
 
@@ -145,6 +145,46 @@ fn optimize_cycles(
         FloatIndex((t * ideal_cycle_l) as f64 + ideal_cycle_l as f64 * i as f64 / cycle_l as f64)
     }
 
+    fn action_swap(
+        c_a: usize,
+        c_b: usize,
+        cycle_status: &mut Vec<usize>,
+        cycles: &Vec<Vec<(usize, usize)>>,
+        ps: &mut Vec<Vec<BTreeSet<FloatIndex>>>,
+        total_cycle_length: i64,
+        ideal_cycle_l: usize,
+    ) -> f64 {
+        let mut score_delta = 0.;
+        // 取り除く
+        for c_i in [c_a, c_b] {
+            if cycle_status[c_i] == UNUSED {
+                continue;
+            }
+            let t = cycle_status[c_i];
+            for (i, v) in cycles[c_i].iter().enumerate() {
+                let index = to_float_index(t, i, cycles[c_i].len(), ideal_cycle_l);
+                score_delta -= calc_delta(index, &ps[v.0][v.1], total_cycle_length, true);
+                ps[v.0][v.1].remove(&index);
+            }
+        }
+        cycle_status.swap(c_a, c_b);
+
+        // 追加する
+        for c_i in [c_a, c_b] {
+            if cycle_status[c_i] == UNUSED {
+                continue;
+            }
+            let t = cycle_status[c_i];
+            for (i, v) in cycles[c_i].iter().enumerate() {
+                let index = to_float_index(t, i, cycles[c_i].len(), ideal_cycle_l);
+                ps[v.0][v.1].insert(index);
+                score_delta += calc_delta(index, &ps[v.0][v.1], total_cycle_length, true);
+            }
+        }
+
+        score_delta
+    }
+
     for c_i in 0..cycle_cnt {
         for (i, v) in cycles[c_i].iter().enumerate() {
             ps[v.0][v.1].insert(to_float_index(c_i, i, cycles[c_i].len(), ideal_cycle_l));
@@ -173,62 +213,28 @@ fn optimize_cycles(
 
         let prev_score = score;
 
-        // 取り除く
-        for c_i in [c_a, c_b] {
-            if cycle_status[c_i] == UNUSED {
-                continue;
-            }
-            let t = cycle_status[c_i];
-            for (i, v) in cycles[c_i].iter().enumerate() {
-                let index = to_float_index(t, i, cycles[c_i].len(), ideal_cycle_l);
-                score -= calc_delta(index, &ps[v.0][v.1], total_cycle_length, true);
-                ps[v.0][v.1].remove(&index);
-            }
-        }
-        cycle_status.swap(c_a, c_b);
-
-        // 追加する
-        for c_i in [c_a, c_b] {
-            if cycle_status[c_i] == UNUSED {
-                continue;
-            }
-            let t = cycle_status[c_i];
-            for (i, v) in cycles[c_i].iter().enumerate() {
-                let index = to_float_index(t, i, cycles[c_i].len(), ideal_cycle_l);
-                ps[v.0][v.1].insert(index);
-                score += calc_delta(index, &ps[v.0][v.1], total_cycle_length, true);
-            }
-        }
+        score += action_swap(
+            c_a,
+            c_b,
+            &mut cycle_status,
+            cycles,
+            &mut ps,
+            total_cycle_length,
+            ideal_cycle_l,
+        );
 
         if score < prev_score {
-            // eprintln!("adopt: {prev_score} -> {score} {c_a} {c_b}");
+            eprintln!("adopt: {prev_score} -> {score} {c_a} {c_b}");
         } else {
-            // 取り除く
-            for c_i in [c_a, c_b] {
-                if cycle_status[c_i] == UNUSED {
-                    continue;
-                }
-                let t = cycle_status[c_i];
-                for (i, v) in cycles[c_i].iter().enumerate() {
-                    let index = to_float_index(t, i, cycles[c_i].len(), ideal_cycle_l);
-                    score -= calc_delta(index, &ps[v.0][v.1], total_cycle_length, true);
-                    ps[v.0][v.1].remove(&index);
-                }
-            }
-            cycle_status.swap(c_a, c_b);
-
-            // 追加する
-            for c_i in [c_a, c_b] {
-                if cycle_status[c_i] == UNUSED {
-                    continue;
-                }
-                let t = cycle_status[c_i];
-                for (i, v) in cycles[c_i].iter().enumerate() {
-                    let index = to_float_index(t, i, cycles[c_i].len(), ideal_cycle_l);
-                    ps[v.0][v.1].insert(index);
-                    score += calc_delta(index, &ps[v.0][v.1], total_cycle_length, true);
-                }
-            }
+            score += action_swap(
+                c_a,
+                c_b,
+                &mut cycle_status,
+                cycles,
+                &mut ps,
+                total_cycle_length,
+                ideal_cycle_l,
+            );
         }
     }
 
@@ -253,8 +259,8 @@ fn create_cycle(
     input: &Input,
     adj: &Adj,
 ) -> Vec<(usize, usize)> {
-    const COUNT_SIZE: usize = 40;
-    const GAIN_SIZE: usize = 30;
+    const COUNT_SIZE: usize = 20;
+    const GAIN_SIZE: usize = 10;
 
     let mut gain_cand = vec![];
     let mut count_cand = vec![];
