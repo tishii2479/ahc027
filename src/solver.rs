@@ -8,6 +8,7 @@ use crate::util::*;
 const TSP_ITER_CNT: usize = 100000;
 const TOTAL_LENGTH: usize = 1e4 as usize;
 const INF: i64 = 1e17 as i64;
+const ALPHA: f64 = 0.8;
 const UNUSED: usize = usize::MAX;
 
 pub fn solve(input: &Input) -> Vec<(usize, usize)> {
@@ -80,7 +81,6 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
         );
     }
 
-    show(&cycles, input);
     let cycle_cnt = cycles.len();
 
     eprintln!("s:               {:?}", s);
@@ -99,8 +99,6 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
     // let cycles = cycle_order.iter().map(|&i| state.cycles[i].clone()).collect();
     let cycle_order: Vec<usize> = (0..cycle_cnt).collect();
     let cycles = cycle_order.iter().map(|&i| cycles[i].clone()).collect();
-
-    show(&cycles, input);
 
     let path = cycles_to_path(&cycles);
 
@@ -140,7 +138,13 @@ fn create_single_cycle(
             }
 
             // ISSUE: `i + cycle.len()`が正しいが、 `i`の方がスコアが良い、謎
-            let index = to_float_index(start_t, end_t, i, dist_sum as usize);
+            // おそらく、厳しく評価した方が良いので、i=0の時によくなりがち
+            let index = to_float_index(
+                start_t,
+                start_t * ALPHA + end_t * (1. - ALPHA),
+                i + cycle.len(),
+                dist_sum as usize,
+            );
             ps[v.0][v.1].insert(index);
             score_delta += calc_delta(index, &ps[v.0][v.1]) * input.d[v.0][v.1] as f64;
         }
