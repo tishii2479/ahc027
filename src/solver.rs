@@ -138,9 +138,10 @@ fn create_single_cycle(
             if ps[v.0][v.1].len() == 1 && ps[v.0][v.1].iter().next().unwrap() < &FloatIndex(0.) {
                 ps[v.0][v.1].clear();
             }
-            let index = to_float_index(start_t, end_t, cycle.len() + i, dist_sum as usize);
+
+            // ISSUE: `i + cycle.len()`が正しいが、 `i`の方がスコアが良い、謎
+            let index = to_float_index(start_t, end_t, i, dist_sum as usize);
             ps[v.0][v.1].insert(index);
-            // eprintln!("{:?} {}", v, index.0);
             score_delta += calc_delta(index, &ps[v.0][v.1]) * input.d[v.0][v.1] as f64;
         }
         cycle.extend(path);
