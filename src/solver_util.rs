@@ -52,8 +52,8 @@ pub fn solve_tsp(
 }
 
 pub fn get_prev_and_next(x: FloatIndex, btree: &BTreeSet<FloatIndex>) -> (f64, f64) {
-    let first = btree.iter().next().unwrap().0 + 2.;
-    let last = btree.iter().next_back().unwrap().0 - 2.;
+    let first = btree.iter().next().unwrap_or(&FloatIndex(0.)).0 + 2.;
+    let last = btree.iter().next_back().unwrap_or(&FloatIndex(1.)).0 - 2.;
     let prev = btree
         .range((std::ops::Bound::Unbounded, std::ops::Bound::Excluded(x)))
         .next_back()
@@ -76,7 +76,14 @@ pub fn calc_prev_delta(x: FloatIndex, btree: &BTreeSet<FloatIndex>) -> f64 {
 /// xをbtreeに追加した時のスコアの差分を計算する
 pub fn calc_delta(x: FloatIndex, btree: &BTreeSet<FloatIndex>) -> f64 {
     let (prev, next) = get_prev_and_next(x, btree);
-    assert!(prev <= x.0 && x.0 <= next);
+    assert!(
+        prev <= x.0 && x.0 <= next,
+        " {:?} {} {} {}",
+        btree,
+        prev,
+        x.0,
+        next,
+    );
     (((x.0 - prev) as f64).powf(2.) + ((next - x.0) as f64).powf(2.))
         - ((next - prev) as f64).powf(2.)
 }
@@ -154,10 +161,6 @@ pub fn calc_dist(s: (usize, usize), input: &Input, adj: &Adj) -> Vec<Vec<i64>> {
         }
     }
     dist
-}
-
-pub fn calc_gain(t1: f64, t2: f64, d: i64) -> f64 {
-    (t1 - t2).powf(2.) * d as f64
 }
 
 #[allow(unused)]
