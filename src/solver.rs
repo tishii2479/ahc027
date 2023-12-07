@@ -88,19 +88,17 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
     eprintln!("cycle_cnt:       {cycle_cnt}");
     eprintln!("total_length:    {}", total_length);
 
-    let state = optimize_cycles(cycles, s, &dist, &adj, input);
-    let mut cycle_order = vec![0; cycle_cnt];
-    for (i, status) in state.cycle_usage.iter().enumerate() {
-        if *status == UNUSED {
-            continue;
-        }
-        cycle_order[*status] = i;
-    }
-    // let use_cycles: Vec<usize> = (0..cycle_cnt).collect();
-    let cycles = cycle_order
-        .iter()
-        .map(|&i| state.cycles[i].clone())
-        .collect();
+    // let state = optimize_cycles(cycles, s, &dist, &adj, input);
+    // let mut cycle_order = vec![0; cycle_cnt];
+    // for (i, status) in state.cycle_usage.iter().enumerate() {
+    //     if *status == UNUSED {
+    //         continue;
+    //     }
+    //     cycle_order[*status] = i;
+    // }
+    // let cycles = cycle_order.iter().map(|&i| state.cycles[i].clone()).collect();
+    let cycle_order: Vec<usize> = (0..cycle_cnt).collect();
+    let cycles = cycle_order.iter().map(|&i| cycles[i].clone()).collect();
 
     show(&cycles, input);
 

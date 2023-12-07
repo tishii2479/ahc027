@@ -168,10 +168,12 @@ pub fn show(cycles: &Vec<Vec<(usize, usize)>>, input: &Input) {
     eprintln!("-----");
     let mut counts = vec![vec![0; input.n]; input.n];
     for cycle in cycles.iter() {
+        eprint!("{} ", cycle.len());
         for v in cycle.iter() {
             counts[v.0][v.1] += 1;
         }
     }
+    eprintln!();
 
     for i in 0..counts.len() {
         for j in 0..counts[i].len() {
