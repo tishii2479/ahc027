@@ -27,16 +27,17 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
 
     let s = s;
     let mut total_length = 0;
-    let ideal_cycle_l = (1.1 / r[s.0][s.1]).round() as usize;
+    let ideal_cycle_l = (2.0 / r[s.0][s.1]).round() as usize;
     let mut cycles = vec![];
     let mut counts = vec![vec![0; input.n]; input.n];
     let pre_p = -(input.n.pow(2) as f64 / TOTAL_LENGTH as f64);
     let mut ps: Vec<Vec<BTreeSet<FloatIndex>>> =
         vec![vec![BTreeSet::from([FloatIndex(pre_p)]); input.n]; input.n];
 
+    let gain_size: usize = input.n * input.n / 12;
+
     // サイクルの作成
     while total_length < TOTAL_LENGTH as i64 {
-        let gain_size: usize = input.n * input.n / 12;
         let mut gain_cand = vec![];
         let start_t = total_length as f64 / TOTAL_LENGTH as f64;
         let end_t = (total_length + ideal_cycle_l as i64) as f64 / TOTAL_LENGTH as f64;
@@ -55,7 +56,6 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
         for i in 0..gain_size {
             selected_v.push(gain_cand[i].1);
         }
-
         let (cycle, _) =
             create_single_cycle(&selected_v, start_t, end_t, &dist, &mut ps, input, &adj);
 
