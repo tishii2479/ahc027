@@ -43,6 +43,11 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
         let end_t = (total_length + ideal_cycle_l as i64) as f64 / TOTAL_LENGTH as f64;
         for i in 0..input.n {
             for j in 0..input.n {
+                eprint!(
+                    "{:.6} ",
+                    calc_prev_delta(FloatIndex((start_t + end_t) / 2.), &ps[i][j])
+                        * input.d[i][j] as f64,
+                );
                 gain_cand.push((
                     calc_prev_delta(FloatIndex((start_t + end_t) / 2.), &ps[i][j])
                         * input.d[i][j] as f64,
@@ -50,6 +55,7 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
                 ));
             }
         }
+        eprintln!();
         gain_cand.sort_by(|a, b| b.partial_cmp(a).unwrap());
 
         let mut selected_v = vec![s];
