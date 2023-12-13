@@ -133,7 +133,7 @@ pub fn calc_r(input: &Input) -> Vec<Vec<f64>> {
     let mut r = vec![vec![0.; input.n]; input.n];
     for i in 0..input.n {
         for j in 0..input.n {
-            r[i][j] = (input.d[i][j] as f64).powf(1. / 3.);
+            r[i][j] = (input.d[i][j] as f64).powf(1. / 2.);
             a_sum += r[i][j];
         }
     }

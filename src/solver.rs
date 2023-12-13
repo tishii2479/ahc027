@@ -25,108 +25,114 @@ pub fn solve(input: &Input) -> Vec<(usize, usize)> {
         }
     }
 
-    let s = s;
-    let mut total_length = 0;
-    let ideal_cycle_l = (2.0 / r[s.0][s.1]).round() as usize;
-    let mut cycles = vec![];
-    let mut counts = vec![vec![0; input.n]; input.n];
-    let pre_p = -(input.n.pow(2) as f64 / TOTAL_LENGTH as f64);
-    let mut ps: Vec<Vec<BTreeSet<FloatIndex>>> =
-        vec![vec![BTreeSet::from([FloatIndex(pre_p)]); input.n]; input.n];
+    let mut best_ans = vec![];
+    let mut best_score = INF;
 
-    let gain_size: usize = input.n * input.n / 12;
+    let mut ds = vec![12];
+    for i in (2..=8).step_by(1) {
+        ds.push(12 - i);
+        ds.push(12 + i);
+    }
 
-    // サイクルの作成
-    while total_length < TOTAL_LENGTH as i64 {
-        let mut gain_cand = vec![];
-        let start_t = total_length as f64 / TOTAL_LENGTH as f64;
-        let end_t = (total_length + ideal_cycle_l as i64) as f64 / TOTAL_LENGTH as f64;
+    for d in ds {
+        if time::elapsed_seconds() > TIME_LIMIT - 0.3 {
+            break;
+        }
+        let s = s;
+        let mut total_length = 0;
+        let ideal_cycle_l = (1.2 / r[s.0][s.1]).round() as usize;
+        let mut cycles = vec![];
+        let mut counts = vec![vec![0; input.n]; input.n];
+        let pre_p = -(input.n.pow(2) as f64 / TOTAL_LENGTH as f64);
+        let mut ps: Vec<Vec<BTreeSet<FloatIndex>>> =
+            vec![vec![BTreeSet::from([FloatIndex(pre_p)]); input.n]; input.n];
+
+        let gain_size: usize = input.n * input.n / d;
+
+        // サイクルの作成
+        while total_length < TOTAL_LENGTH as i64 {
+            let mut gain_cand = vec![];
+            let start_t = total_length as f64 / TOTAL_LENGTH as f64;
+            let end_t = (total_length + ideal_cycle_l as i64) as f64 / TOTAL_LENGTH as f64;
+            for i in 0..input.n {
+                for j in 0..input.n {
+                    gain_cand.push((
+                        calc_prev_delta(FloatIndex((start_t + end_t) / 2.), &ps[i][j])
+                            * input.d[i][j] as f64,
+                        (i, j),
+                    ));
+                }
+            }
+            // eprintln!();
+            gain_cand.sort_by(|a, b| b.partial_cmp(a).unwrap());
+
+            let mut selected_v = vec![s];
+            for i in 0..gain_size {
+                selected_v.push(gain_cand[i].1);
+            }
+            let (cycle, _) =
+                create_single_cycle(&selected_v, start_t, end_t, &dist, &mut ps, input, &adj);
+
+            // eprint!("{} ", cycle.len());
+            for v in cycle.iter() {
+                counts[v.0][v.1] += 1;
+            }
+
+            total_length += cycle.len() as i64;
+            cycles.push(cycle);
+        }
+        // eprintln!();
+
+        // 回収されなかったところを全て回収するサイクルを作る
+        let mut unvisited = vec![];
         for i in 0..input.n {
             for j in 0..input.n {
-                eprint!(
-                    "{:.6} ",
-                    calc_prev_delta(FloatIndex((start_t + end_t) / 2.), &ps[i][j])
-                        * input.d[i][j] as f64,
-                );
-                gain_cand.push((
-                    calc_prev_delta(FloatIndex((start_t + end_t) / 2.), &ps[i][j])
-                        * input.d[i][j] as f64,
-                    (i, j),
-                ));
+                if counts[i][j] == 0 {
+                    unvisited.push((i, j));
+                }
             }
         }
-        eprintln!();
-        gain_cand.sort_by(|a, b| b.partial_cmp(a).unwrap());
-
-        let mut selected_v = vec![s];
-        for i in 0..gain_size {
-            selected_v.push(gain_cand[i].1);
+        if unvisited.len() > 0 {
+            eprintln!("unvisited counts:    {}", unvisited.len());
+            unvisited.insert(0, s);
+            cycles.push(
+                create_single_cycle(
+                    &unvisited,
+                    total_length as f64 / TOTAL_LENGTH as f64,
+                    (total_length + ideal_cycle_l as i64) as f64 / TOTAL_LENGTH as f64,
+                    &dist,
+                    &mut ps,
+                    input,
+                    &adj,
+                )
+                .0,
+            );
         }
-        let (cycle, _) =
-            create_single_cycle(&selected_v, start_t, end_t, &dist, &mut ps, input, &adj);
 
-        eprint!("{} ", cycle.len());
-        for v in cycle.iter() {
-            counts[v.0][v.1] += 1;
-        }
+        let cycle_cnt = cycles.len();
 
-        total_length += cycle.len() as i64;
-        cycles.push(cycle);
-    }
-    eprintln!();
-
-    // 回収されなかったところを全て回収するサイクルを作る
-    let mut unvisited = vec![];
-    for i in 0..input.n {
-        for j in 0..input.n {
-            if counts[i][j] == 0 {
-                unvisited.push((i, j));
-            }
-        }
-    }
-    if unvisited.len() > 0 {
-        eprintln!("unvisited counts:    {}", unvisited.len());
-        unvisited.insert(0, s);
-        cycles.push(
-            create_single_cycle(
-                &unvisited,
-                total_length as f64 / TOTAL_LENGTH as f64,
-                (total_length + ideal_cycle_l as i64) as f64 / TOTAL_LENGTH as f64,
-                &dist,
-                &mut ps,
-                input,
-                &adj,
-            )
-            .0,
+        eprintln!("s:               {:?}", s);
+        eprintln!("ideal_cycle_l:   {ideal_cycle_l}");
+        eprintln!("cycle_cnt:       {cycle_cnt}");
+        eprintln!("total_length:    {}", total_length);
+        eprintln!(
+            "average_length:  {:.3}",
+            total_length as f64 / cycle_cnt as f64
         );
+
+        let cycle_order: Vec<usize> = (0..cycle_cnt).collect();
+        let cycles = cycle_order.iter().map(|&i| cycles[i].clone()).collect();
+
+        let ans = cycles_to_path(&cycles);
+
+        let score = calc_score(input, &ans);
+        if score < best_score {
+            best_score = score;
+            best_ans = ans;
+        }
     }
 
-    let cycle_cnt = cycles.len();
-
-    eprintln!("s:               {:?}", s);
-    eprintln!("ideal_cycle_l:   {ideal_cycle_l}");
-    eprintln!("cycle_cnt:       {cycle_cnt}");
-    eprintln!("total_length:    {}", total_length);
-    eprintln!(
-        "average_length:  {:.3}",
-        total_length as f64 / cycle_cnt as f64
-    );
-
-    // let state = optimize_cycles(cycles, s, &dist, &adj, input);
-    // let mut cycle_order = vec![0; cycle_cnt];
-    // for (i, status) in state.cycle_usage.iter().enumerate() {
-    //     if *status == UNUSED {
-    //         continue;
-    //     }
-    //     cycle_order[*status] = i;
-    // }
-    // let cycles = cycle_order.iter().map(|&i| state.cycles[i].clone()).collect();
-    let cycle_order: Vec<usize> = (0..cycle_cnt).collect();
-    let cycles = cycle_order.iter().map(|&i| cycles[i].clone()).collect();
-
-    let path = cycles_to_path(&cycles);
-
-    path
+    best_ans
 }
 
 fn create_single_cycle(
@@ -161,7 +167,6 @@ fn create_single_cycle(
                 ps[v.0][v.1].clear();
             }
 
-            // ISSUE: `i + cycle.len()`が正しいが、 `i`の方がスコアが良い、謎
             // おそらく、厳しく評価した方が良いので、i=0の時によくなりがち
             let index = to_float_index(
                 start_t,

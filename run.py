@@ -176,9 +176,7 @@ def evaluate_relative_score(
     logger.info(score_df.sort_values(by="relative_score", ascending=False)[:10])
     logger.info("Top 10 aggravations:")
     logger.info(score_df.sort_values(by="relative_score")[:10])
-    logger.info(
-        f"Longest duration: {score_df.sort_values(by='duration').iloc[-1].duration}"
-    )
+    logger.info(f"Longest duration: {score_df.sort_values(by='duration').iloc[-1]}")
 
     if columns is not None:
         assert 1 <= len(columns) <= 2
